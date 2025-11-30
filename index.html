@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MacBook Pro 16 M3 Max – Screen Pixel Test</title>
+    <title>MacBook Pro 16 M3 Max – Retina Pixel Test</title>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <style>
         html, body {
@@ -14,31 +14,53 @@
             overflow: hidden;    /* No scrollbars */
         }
 
-        /* Black area that exactly matches the visible window size */
+        /* Fullscreen black wrapper */
         #wrapper {
             position: fixed;
             top: 0;
             left: 0;
+            width: 100%;
+            height: 100%;
             background: #000000; /* Absolutely black background */
+            overflow: hidden;
         }
 
-        /* Inner white border along the perimeter (inside) */
+        /* Inner border (hairline) to approximate 1 physical pixel on Retina */
         #frame {
             position: absolute;
             top: 1px;
             left: 1px;
             right: 1px;
             bottom: 1px;
-            /* Hairline border: on Retina it is usually rendered as 1 physical pixel */
-            border: 0.5px solid #FFFFFF; /* Absolutely white border */
+            border: 0.5px solid #FFFFFF; /* Absolutely white border (hairline) */
             box-sizing: border-box;
             background: transparent;
-            display: none; /* Hidden by default, toggled by Space key */
+            display: none; /* Toggled by Space key */
+            pointer-events: none;
+        }
+
+        /* Moving pixel-like dots, also hairline-sized */
+        .pixel-dot {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 0.5px;   /* Hairline size: ~1 physical pixel on Retina */
+            height: 0.5px;  /* Hairline size: ~1 physical pixel on Retina */
+            background-color: #FFFFFF;
+            display: none;  /* Toggled by number keys 1–4 */
+            pointer-events: none;
         }
     </style>
 </head>
 <body>
 <div id="wrapper">
+    <!-- Pixel dots for keys 1–4 -->
+    <div id="dot1" class="pixel-dot"></div> <!-- Red -->
+    <div id="dot2" class="pixel-dot"></div> <!-- Green -->
+    <div id="dot3" class="pixel-dot"></div> <!-- Cyan -->
+    <div id="dot4" class="pixel-dot"></div> <!-- White -->
+
+    <!-- Inner frame that can blink on collisions -->
     <div id="frame"></div>
 </div>
 
@@ -46,39 +68,192 @@
     (function () {
         const wrapper = document.getElementById('wrapper');
         const frame = document.getElementById('frame');
+
+        // Dot configuration per key
+        const dotConfigs = {
+            '1': { id: 'dot1', color: '#FF0000' }, // Red
+            '2': { id: 'dot2', color: '#00FF00' }, // Green
+            '3': { id: 'dot3', color: '#00FFFF' }, // Cyan
+            '4': { id: 'dot4', color: '#FFFFFF' }  // White
+        };
+
+        // State for each dot (position, velocity, etc.)
+        const dots = {};
+
+        // Viewport size in CSS pixels
+        let viewportWidth = 0;
+        let viewportHeight = 0;
+
+        // Frame visibility and flashing
         let frameVisible = false;
+        const frameBaseColor = '#FFFFFF';
+        let frameFlashEndTime = 0;
 
-        function resizeToViewport() {
-            const vw = window.innerWidth;
-            const vh = window.innerHeight;
-            const dpr = window.devicePixelRatio || 1;
-
-            // Set the black area width and height to match the current viewport
-            wrapper.style.width = vw + 'px';
-            wrapper.style.height = vh + 'px';
-
-            // Debug info in the console: logical viewport, physical screen size and DPR
-            console.clear();
-            console.log('Viewport (window.innerWidth x window.innerHeight): ' + vw + ' x ' + vh);
-            console.log('Screen   (screen.width x screen.height): ' + window.screen.width + ' x ' + window.screen.height);
-            console.log('devicePixelRatio:', dpr);
-            console.log('Note: 1 CSS px = devicePixelRatio physical pixels in each direction.');
+        // Initialize dots
+        for (const key in dotConfigs) {
+            const cfg = dotConfigs[key];
+            const el = document.getElementById(cfg.id);
+            dots[key] = {
+                key: key,
+                element: el,
+                color: cfg.color,
+                active: false,
+                x: 0,
+                y: 0,
+                vx: 0,
+                vy: 0
+            };
         }
 
-        // Handle Space key to toggle border visibility
-        function handleKeyDown(event) {
-            if (event.code === 'Space' || event.key === ' ') {
-                // Prevent default scrolling or page actions
-                event.preventDefault();
-                frameVisible = !frameVisible;
-                frame.style.display = frameVisible ? 'block' : 'none';
+        function resizeToViewport() {
+            viewportWidth = window.innerWidth;
+            viewportHeight = window.innerHeight;
+
+            // Set wrapper size exactly to the current viewport
+            wrapper.style.width = viewportWidth + 'px';
+            wrapper.style.height = viewportHeight + 'px';
+
+            const dpr = window.devicePixelRatio || 1;
+
+            // Debug info: viewport size and DPR
+            console.clear();
+            console.log('Viewport (window.innerWidth x window.innerHeight): ' +
+                viewportWidth + ' x ' + viewportHeight);
+            console.log('devicePixelRatio:', dpr);
+            console.log('Note: hairline sizes (0.5px) are usually rendered as 1 physical pixel on Retina.');
+
+            // Clamp all active dots inside the new viewport
+            for (const key in dots) {
+                const dot = dots[key];
+                if (!dot.active) continue;
+                if (dot.x < 0) dot.x = 0;
+                if (dot.y < 0) dot.y = 0;
+                if (dot.x > viewportWidth) dot.x = viewportWidth;
+                if (dot.y > viewportHeight) dot.y = viewportHeight;
             }
         }
 
-        // Adjust to viewport changes
+        // Toggle frame visibility (Space)
+        function toggleFrame() {
+            frameVisible = !frameVisible;
+            frame.style.display = frameVisible ? 'block' : 'none';
+            if (frameVisible) {
+                frame.style.borderColor = frameBaseColor;
+            }
+        }
+
+        // Toggle a specific dot by key (1–4)
+        function toggleDot(key) {
+            const dot = dots[key];
+            if (!dot) return;
+
+            if (dot.active) {
+                // Deactivate dot
+                dot.active = false;
+                dot.element.style.display = 'none';
+            } else {
+                // Activate dot: place in the center with random direction
+                dot.active = true;
+                dot.x = viewportWidth / 2;
+                dot.y = viewportHeight / 2;
+
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 0.75; // Movement speed in CSS pixels per frame (approx.)
+
+                dot.vx = Math.cos(angle) * speed;
+                dot.vy = Math.sin(angle) * speed;
+
+                dot.element.style.display = 'block';
+                dot.element.style.backgroundColor = dot.color;
+            }
+        }
+
+        // Flash the frame with the given color for a short time
+        function flashFrame(color) {
+            if (!frameVisible) return;
+            frame.style.borderColor = color;
+            frameFlashEndTime = performance.now() + 80; // Flash duration in ms
+        }
+
+        // Keyboard handler
+        function handleKeyDown(event) {
+            if (event.code === 'Space' || event.key === ' ') {
+                // Toggle frame visibility with Space
+                event.preventDefault();
+                toggleFrame();
+                return;
+            }
+
+            // Number keys 1–4 to toggle dots
+            if (event.key === '1' || event.key === '2' ||
+                event.key === '3' || event.key === '4') {
+                event.preventDefault();
+                toggleDot(event.key);
+            }
+        }
+
+        // Animation loop for moving dots and handling collisions
+        function animate() {
+            const now = performance.now();
+
+            // Reset frame color after flash
+            if (frameVisible && frameFlashEndTime > 0 && now > frameFlashEndTime) {
+                frame.style.borderColor = frameBaseColor;
+                frameFlashEndTime = 0;
+            }
+
+            for (const key in dots) {
+                const dot = dots[key];
+                if (!dot.active) continue;
+
+                // Update position
+                dot.x += dot.vx;
+                dot.y += dot.vy;
+
+                let hitWall = false;
+
+                // Collision with left/right walls
+                if (dot.x <= 0) {
+                    dot.x = 0;
+                    dot.vx = Math.abs(dot.vx);
+                    hitWall = true;
+                } else if (dot.x >= viewportWidth) {
+                    dot.x = viewportWidth;
+                    dot.vx = -Math.abs(dot.vx);
+                    hitWall = true;
+                }
+
+                // Collision with top/bottom walls
+                if (dot.y <= 0) {
+                    dot.y = 0;
+                    dot.vy = Math.abs(dot.vy);
+                    hitWall = true;
+                } else if (dot.y >= viewportHeight) {
+                    dot.y = viewportHeight;
+                    dot.vy = -Math.abs(dot.vy);
+                    hitWall = true;
+                }
+
+                // If a wall was hit, flash the frame in this dot's color
+                if (hitWall) {
+                    flashFrame(dot.color);
+                }
+
+                // Apply position via CSS transform for subpixel precision
+                dot.element.style.transform =
+                    'translate(' + dot.x + 'px, ' + dot.y + 'px)';
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // Event listeners
         window.addEventListener('resize', resizeToViewport);
         window.addEventListener('keydown', handleKeyDown);
-        window.addEventListener('load', resizeToViewport);
+        window.addEventListener('load', function () {
+            resizeToViewport();
+            requestAnimationFrame(animate);
+        });
         document.addEventListener('DOMContentLoaded', resizeToViewport);
     })();
 </script>
