@@ -17,7 +17,8 @@ Because it is a single self-contained HTML file, it can be hosted for free on **
     - moving points of light,
     - different colors (R/G/B/W),
     - multiple simultaneous sources,
-    - short “flashes” (explosion waves)
+    - short “flashes” (explosion waves),
+    - pixels that are **pushed and kicked around** by a bright square “paddle”
 - How the panel behaves near the **screen edges** (with a white frame)
 
 Use it in a dark room, set brightness as you like, and watch how light spreads or stays contained around the pixels.
@@ -108,6 +109,49 @@ When the frame is visible, the small HUD in the bottom-right corner shows:
 
 ---
 
+## Fun interaction mode (catch & kick pixels)
+
+Besides “static” observation, there is a small **entertainment / interaction mode** that is also useful for testing:
+you can catch pixels with a bright square and **launch** them to see how halos behave during fast motion.
+
+### Desktop (mouse)
+
+- Press and hold the **left mouse button** anywhere on the screen.
+    - A bright **square “paddle”** with a rainbow frame appears under the cursor.
+    - Any pixel inside this square at the moment of click is **captured** and moves together with the square.
+- Move the mouse while holding the button:
+    - the captured pixel(s) travel with the square.
+- Release the mouse:
+    - captured pixels are **flung away** with the speed and direction of the square at the moment of release.
+
+When pixels **hit** this square:
+
+- they bounce off with reduced elasticity (so the impact is softer than from the screen edge),
+- a short **explosion wave** appears at the collision point,
+- the explosion color mixes the pixel color and the current color of the rainbow frame.
+
+This lets you see how halos and blooming behave when bright objects are:
+- moved quickly through dark areas,
+- suddenly accelerated or stopped,
+- clustered around a larger bright shape (the square).
+
+### Mobile / tablet (multi-touch)
+
+On touch devices the same logic works with fingers:
+
+- Touch and hold with **one finger** – a square appears under that finger and captures any pixels inside.
+- Touch with **two or more fingers at once**:
+    - each finger gets its **own square**,
+    - you can catch and launch pixels with **two fingers in different places**,
+    - collisions with each square also create explosion waves.
+
+This is a handy way to:
+- interactively “push” pixels through different parts of the screen,
+- see how halos follow moving lights,
+- compare backlight behaviour under quick, chaotic movement.
+
+---
+
 ## How to use it in practice
 
 Some ideas for testing:
@@ -124,6 +168,9 @@ Some ideas for testing:
 - Explore **blooming with larger objects**:
     - Increase size with `+` until pixels become small squares.
     - Observe how halos grow and how well the screen controls large bright areas.
+- Use the **fun interaction mode**:
+    - Catch a pixel with the square, fling it across the screen and follow the halo.
+    - On mobile, use **two fingers** to bounce pixels between two squares and watch how local dimming reacts.
 
 ---
 
