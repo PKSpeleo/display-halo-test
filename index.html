@@ -62,7 +62,7 @@
             font-family: monospace;
             font-size: 11px;
             line-height: 1.4;
-            white-space: pre;
+            white-space: pre-wrap;
             pointer-events: none;
             display: none; /* Shown only when base frame is visible */
             text-align: right;
@@ -117,7 +117,9 @@
         // devicePixelRatio-related sizing
         let currentDpr = window.devicePixelRatio || 1;
         let baseUnit = 1 / currentDpr;   // CSS px per "1 physical pixel" step
-        let pixelScale = 1;              // How many physical pixels thick (approx)
+
+        // DEFAULT: equivalent to ~10 physical pixels
+        let pixelScale = 10;             // How many physical pixels thick (approx)
         const minScale = 1;
         const maxScale = 20;
 
@@ -128,7 +130,7 @@
         let frameFlashEndTime = 0;          // Timestamp when flash should end
         let frameFlashActive = false;       // True while flash is active
 
-        // Initialize dots
+        // Initialize dots map
         for (const key in dotConfigs) {
             const cfg = dotConfigs[key];
             const el = document.getElementById(cfg.id);
@@ -158,14 +160,16 @@
             }
         }
 
-        // Log current state to the console and update HUD text
+        // Log current state to the console and update HUD HTML (with colored pixel labels)
         function logState() {
-            const activeLabels = [];
+            const activeKeys = [];
             for (const key in dots) {
                 if (dots[key].active) {
-                    activeLabels.push(dotLabels[key] || key);
+                    activeKeys.push(key);
                 }
             }
+
+            const activeLabels = activeKeys.map(k => dotLabels[k] || k);
 
             const sizeCss = (1 / currentDpr) * pixelScale;
             const approxPhysical = pixelScale; // By design: pixelScale ~ number of physical pixels
@@ -173,7 +177,6 @@
             const stateLines = [
                 'Frame base visible: ' + frameBaseVisible,
                 'Frame flash active: ' + frameFlashActive,
-                'Active pixels: ' + (activeLabels.length ? activeLabels.join(', ') : 'none'),
                 'Viewport: ' + viewportWidth + ' x ' + viewportHeight,
                 'devicePixelRatio: ' + currentDpr,
                 'Pixel scale: ' + pixelScale +
@@ -183,9 +186,52 @@
 
             console.log('--- STATE ---');
             stateLines.forEach(line => console.log(line));
+            console.log(
+                'Active pixels: ' +
+                (activeLabels.length ? activeLabels.join(', ') : 'none')
+            );
+
+            // Extra console line with colored labels
+            if (activeKeys.length) {
+                let line = 'Active pixels colored: ';
+                const styles = [];
+                activeKeys.forEach((k, index) => {
+                    const label = dotLabels[k] || k;
+                    line += (index === 0 ? '%c' : ', %c') + label;
+                    styles.push('color: ' + dots[k].color + ';');
+                });
+                console.log(line, ...styles);
+            } else {
+                console.log('Active pixels colored: none');
+            }
+
             console.log('---------------');
 
-            hud.textContent = stateLines.join('\n');
+            // Build HUD HTML with colored pixel labels
+            const hudLines = [];
+            hudLines.push('Frame base visible: ' + frameBaseVisible);
+            hudLines.push('Frame flash active: ' + frameFlashActive);
+
+            if (activeKeys.length) {
+                const coloredParts = activeKeys.map(k =>
+                    '<span style="color:' + dots[k].color + ';">' +
+                    (dotLabels[k] || k) +
+                    '</span>'
+                );
+                hudLines.push('Active pixels: ' + coloredParts.join(', '));
+            } else {
+                hudLines.push('Active pixels: none');
+            }
+
+            hudLines.push('Viewport: ' + viewportWidth + ' x ' + viewportHeight);
+            hudLines.push('devicePixelRatio: ' + currentDpr);
+            hudLines.push(
+                'Pixel scale: ' + pixelScale +
+                ' (CSS px: ' + sizeCss.toFixed(3) +
+                ', approx physical px: ' + approxPhysical + ')'
+            );
+
+            hud.innerHTML = hudLines.join('<br>');
         }
 
         // Apply base visibility to frame and HUD (only used when no flash is active)
@@ -296,14 +342,18 @@
             logState();
         }
 
-        // Keyboard handler
+        // Keyboard handler (layout-independent for +/- using event.code)
         function handleKeyDown(event) {
-            if (event.code === 'Space' || event.key === ' ') {
+            const code = event.code;
+
+            // Space toggles frame
+            if (code === 'Space') {
                 event.preventDefault();
                 toggleFrame();
                 return;
             }
 
+            // 1–4 by key value (number keys are stable enough)
             if (event.key === '1' || event.key === '2' ||
                 event.key === '3' || event.key === '4') {
                 event.preventDefault();
@@ -311,15 +361,19 @@
                 return;
             }
 
-            // '=' or '+' to increase pixel scale (both work; '=' covers "same key as +" without Shift)
-            if (event.key === '=' || event.key === '+') {
+            // Increase pixel scale:
+            //   - 'Equal' -> physical key near Backspace (US: =/+)
+            //   - 'NumpadAdd' -> plus on numpad
+            if (code === 'Equal' || code === 'NumpadAdd') {
                 event.preventDefault();
                 changePixelScale(+1);
                 return;
             }
 
-            // '-' to decrease pixel scale
-            if (event.key === '-') {
+            // Decrease pixel scale:
+            //   - 'Minus' -> physical minus key near 0
+            //   - 'NumpadSubtract' -> minus on numpad
+            if (code === 'Minus' || code === 'NumpadSubtract') {
                 event.preventDefault();
                 changePixelScale(-1);
                 return;
@@ -379,10 +433,29 @@
             requestAnimationFrame(animate);
         }
 
+        // Activate all dots by default at startup
+        function activateDefaultDots() {
+            for (const key of ['1', '2', '3', '4']) {
+                const dot = dots[key];
+                if (!dot) continue;
+                dot.active = true;
+                dot.x = viewportWidth / 2;
+                dot.y = viewportHeight / 2;
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 0.75;
+                dot.vx = Math.cos(angle) * speed;
+                dot.vy = Math.sin(angle) * speed;
+                dot.element.style.display = 'block';
+                dot.element.style.backgroundColor = dot.color;
+            }
+            logState();
+        }
+
         window.addEventListener('resize', resizeToViewport);
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('load', function () {
             resizeToViewport();
+            activateDefaultDots();
             requestAnimationFrame(animate);
         });
         document.addEventListener('DOMContentLoaded', resizeToViewport);
