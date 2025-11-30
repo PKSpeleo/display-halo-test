@@ -67,7 +67,7 @@
             z-index: 2; /* Under moving pixels, above frame */
         }
 
-        /* Pointer-controlled square push boxes (200x200 physical px with rainbow frame).
+        /* Pointer-controlled square push boxes (300x300 physical px with rainbow frame).
            Used to "kick" pixels and observe halos while everything moves. */
         .pushBox {
             position: absolute;
@@ -200,7 +200,7 @@
 
         // Pointer-controlled square push boxes (one per active pointer)
         const pushBoxes = {}; // pointerId -> {pointerId, el, x,y,prevX,prevY,lastVx,lastVy,hue,color}
-        const pushBoxSidePhysical = 200;   // side length in physical pixels
+        const pushBoxSidePhysical = 300;   // side length in physical pixels (300x300)
         const pushBoxBorderPhysical = 20;  // border thickness in physical pixels
         const pushBoxRestitution = 0.5;    // elasticity coefficient for collisions
 
