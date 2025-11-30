@@ -25,13 +25,13 @@
             overflow: hidden;
         }
 
-        /* Inner border; actual width is controlled via JS */
+        /* Frame exactly on screen edge; border width is controlled via JS */
         #frame {
             position: absolute;
-            top: 1px;
-            left: 1px;
-            right: 1px;
-            bottom: 1px;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
             border: 1px solid #FFFFFF; /* Initial value, overridden by JS */
             box-sizing: border-box;
             background: transparent;
@@ -130,7 +130,7 @@
         let frameFlashEndTime = 0;          // Timestamp when flash should end
         let frameFlashActive = false;       // True while flash is active
 
-        // Initialize dots map
+        // Initialize dots map (center-based coordinates)
         for (const key in dotConfigs) {
             const cfg = dotConfigs[key];
             const el = document.getElementById(cfg.id);
@@ -139,17 +139,22 @@
                 element: el,
                 color: cfg.color,
                 active: false,
-                x: 0,
-                y: 0,
+                x: 0,  // center x
+                y: 0,  // center y
                 vx: 0,
                 vy: 0
             };
         }
 
+        // Helper: current pixel size in CSS px
+        function getPixelSizeCss() {
+            return (1 / currentDpr) * pixelScale;
+        }
+
         // Update CSS sizes for frame border and dot size based on DPR and pixelScale
         function updatePixelSizes() {
             baseUnit = 1 / currentDpr;
-            const sizeCss = baseUnit * pixelScale; // CSS px thickness
+            const sizeCss = getPixelSizeCss();
 
             frame.style.borderWidth = sizeCss + 'px';
 
@@ -171,8 +176,8 @@
 
             const activeLabels = activeKeys.map(k => dotLabels[k] || k);
 
-            const sizeCss = (1 / currentDpr) * pixelScale;
-            const approxPhysical = pixelScale; // By design: pixelScale ~ number of physical pixels
+            const sizeCss = getPixelSizeCss();
+            const approxPhysical = pixelScale;
 
             const stateLines = [
                 'Frame base visible: ' + frameBaseVisible,
@@ -191,7 +196,6 @@
                 (activeLabels.length ? activeLabels.join(', ') : 'none')
             );
 
-            // Extra console line with colored labels
             if (activeKeys.length) {
                 let line = 'Active pixels colored: ';
                 const styles = [];
@@ -264,15 +268,23 @@
             console.log('Viewport (window.innerWidth x window.innerHeight): ' +
                 viewportWidth + ' x ' + viewportHeight);
             console.log('devicePixelRatio:', currentDpr);
-            console.log('Note: base unit is 1 / devicePixelRatio CSS px; Pixel scale steps ~ physical pixels.');
+            console.log('Note: border and pixel size are tied to devicePixelRatio.');
+
+            // Clamp active dots to stay fully on screen
+            const sizeCss = getPixelSizeCss();
+            const half = sizeCss / 2;
+            const minX = half;
+            const maxX = viewportWidth - half;
+            const minY = half;
+            const maxY = viewportHeight - half;
 
             for (const key in dots) {
                 const dot = dots[key];
                 if (!dot.active) continue;
-                if (dot.x < 0) dot.x = 0;
-                if (dot.y < 0) dot.y = 0;
-                if (dot.x > viewportWidth) dot.x = viewportWidth;
-                if (dot.y > viewportHeight) dot.y = viewportHeight;
+                if (dot.x < minX) dot.x = minX;
+                if (dot.x > maxX) dot.x = maxX;
+                if (dot.y < minY) dot.y = minY;
+                if (dot.y > maxY) dot.y = maxY;
             }
 
             if (!frameFlashActive) {
@@ -288,6 +300,24 @@
             if (newScale === pixelScale) return;
             pixelScale = newScale;
             updatePixelSizes();
+
+            // Re-clamp dots to keep them within screen edges
+            const sizeCss = getPixelSizeCss();
+            const half = sizeCss / 2;
+            const minX = half;
+            const maxX = viewportWidth - half;
+            const minY = half;
+            const maxY = viewportHeight - half;
+
+            for (const key in dots) {
+                const dot = dots[key];
+                if (!dot.active) continue;
+                if (dot.x < minX) dot.x = minX;
+                if (dot.x > maxX) dot.x = maxX;
+                if (dot.y < minY) dot.y = minY;
+                if (dot.y > maxY) dot.y = maxY;
+            }
+
             logState();
         }
 
@@ -380,7 +410,7 @@
             }
         }
 
-        // Animation loop
+        // Animation loop: bounce from SCREEN EDGES (not frame)
         function animate() {
             const now = performance.now();
 
@@ -393,6 +423,14 @@
                 logState();
             }
 
+            const sizeCss = getPixelSizeCss();
+            const half = sizeCss / 2;
+
+            const minX = half;                     // inner screen edge (left)
+            const maxX = viewportWidth - half;     // inner screen edge (right)
+            const minY = half;                     // inner screen edge (top)
+            const maxY = viewportHeight - half;    // inner screen edge (bottom)
+
             for (const key in dots) {
                 const dot = dots[key];
                 if (!dot.active) continue;
@@ -402,22 +440,23 @@
 
                 let hitWall = false;
 
-                if (dot.x <= 0) {
-                    dot.x = 0;
+                // Bounce from screen edges (independent of frame border width)
+                if (dot.x <= minX) {
+                    dot.x = minX;
                     dot.vx = Math.abs(dot.vx);
                     hitWall = true;
-                } else if (dot.x >= viewportWidth) {
-                    dot.x = viewportWidth;
+                } else if (dot.x >= maxX) {
+                    dot.x = maxX;
                     dot.vx = -Math.abs(dot.vx);
                     hitWall = true;
                 }
 
-                if (dot.y <= 0) {
-                    dot.y = 0;
+                if (dot.y <= minY) {
+                    dot.y = minY;
                     dot.vy = Math.abs(dot.vy);
                     hitWall = true;
-                } else if (dot.y >= viewportHeight) {
-                    dot.y = viewportHeight;
+                } else if (dot.y >= maxY) {
+                    dot.y = maxY;
                     dot.vy = -Math.abs(dot.vy);
                     hitWall = true;
                 }
@@ -426,8 +465,9 @@
                     flashFrame(dot.color);
                 }
 
+                // Translate from center coordinates to top-left for CSS positioning
                 dot.element.style.transform =
-                    'translate(' + dot.x + 'px, ' + dot.y + 'px)';
+                    'translate(' + (dot.x - half) + 'px, ' + (dot.y - half) + 'px)';
             }
 
             requestAnimationFrame(animate);
