@@ -35,7 +35,7 @@
             border: 0.5px solid #FFFFFF; /* Absolutely white border (hairline) */
             box-sizing: border-box;
             background: transparent;
-            display: none; /* Toggled by Space key */
+            display: none; /* Base visibility (toggled by Space key) */
             pointer-events: none;
         }
 
@@ -85,9 +85,10 @@
         let viewportHeight = 0;
 
         // Frame visibility and flashing
-        let frameVisible = false;
+        let frameBaseVisible = false;       // Controlled by Space key
         const frameBaseColor = '#FFFFFF';
-        let frameFlashEndTime = 0;
+        let frameFlashEndTime = 0;          // Timestamp when flash should end
+        let frameFlashActive = false;       // True while flash is active
 
         // Initialize dots
         for (const key in dotConfigs) {
@@ -114,9 +115,21 @@
                 }
             }
             console.log('--- STATE ---');
-            console.log('Frame visible:', frameVisible);
+            console.log('Frame base visible (Space):', frameBaseVisible);
+            console.log('Frame flash active:', frameFlashActive);
             console.log('Active pixels (keys):', activeKeys.length ? activeKeys.join(', ') : 'none');
             console.log('---------------');
+        }
+
+        // Apply base visibility to frame (only used when no flash is active)
+        function applyBaseFrameVisibility() {
+            if (frameBaseVisible) {
+                frame.style.display = 'block';
+                frame.style.borderColor = frameBaseColor;
+            } else {
+                frame.style.display = 'none';
+                frame.style.borderColor = frameBaseColor;
+            }
         }
 
         function resizeToViewport() {
@@ -146,17 +159,24 @@
                 if (dot.y > viewportHeight) dot.y = viewportHeight;
             }
 
+            // Keep frame visibility consistent with base state when not flashing
+            if (!frameFlashActive) {
+                applyBaseFrameVisibility();
+            }
+
             // Log current state after resize
             logState();
         }
 
-        // Toggle frame visibility (Space)
+        // Toggle base frame visibility (Space)
         function toggleFrame() {
-            frameVisible = !frameVisible;
-            frame.style.display = frameVisible ? 'block' : 'none';
-            if (frameVisible) {
-                frame.style.borderColor = frameBaseColor;
+            frameBaseVisible = !frameBaseVisible;
+
+            // If no flash is active, immediately reflect base visibility
+            if (!frameFlashActive) {
+                applyBaseFrameVisibility();
             }
+
             logState();
         }
 
@@ -188,17 +208,20 @@
             logState();
         }
 
-        // Flash the frame with the given color for a short time
+        // Flash the frame with the given color for a short time,
+        // regardless of base visibility.
         function flashFrame(color) {
-            if (!frameVisible) return;
-            frame.style.borderColor = color;
+            frameFlashActive = true;
+            frame.style.display = 'block';      // Ensure it is visible for the flash
+            frame.style.borderColor = color;    // Set flash color
             frameFlashEndTime = performance.now() + 80; // Flash duration in ms
+            logState();
         }
 
         // Keyboard handler
         function handleKeyDown(event) {
             if (event.code === 'Space' || event.key === ' ') {
-                // Toggle frame visibility with Space
+                // Toggle base frame visibility with Space
                 event.preventDefault();
                 toggleFrame();
                 return;
@@ -217,9 +240,12 @@
             const now = performance.now();
 
             // Reset frame color after flash
-            if (frameVisible && frameFlashEndTime > 0 && now > frameFlashEndTime) {
-                frame.style.borderColor = frameBaseColor;
+            if (frameFlashActive && frameFlashEndTime > 0 && now > frameFlashEndTime) {
+                frameFlashActive = false;
                 frameFlashEndTime = 0;
+                // Return to base frame state
+                applyBaseFrameVisibility();
+                logState();
             }
 
             for (const key in dots) {
