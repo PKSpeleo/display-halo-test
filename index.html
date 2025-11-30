@@ -105,6 +105,20 @@
             };
         }
 
+        // Log current state to the console
+        function logState() {
+            const activeKeys = [];
+            for (const key in dots) {
+                if (dots[key].active) {
+                    activeKeys.push(key);
+                }
+            }
+            console.log('--- STATE ---');
+            console.log('Frame visible:', frameVisible);
+            console.log('Active pixels (keys):', activeKeys.length ? activeKeys.join(', ') : 'none');
+            console.log('---------------');
+        }
+
         function resizeToViewport() {
             viewportWidth = window.innerWidth;
             viewportHeight = window.innerHeight;
@@ -131,6 +145,9 @@
                 if (dot.x > viewportWidth) dot.x = viewportWidth;
                 if (dot.y > viewportHeight) dot.y = viewportHeight;
             }
+
+            // Log current state after resize
+            logState();
         }
 
         // Toggle frame visibility (Space)
@@ -140,6 +157,7 @@
             if (frameVisible) {
                 frame.style.borderColor = frameBaseColor;
             }
+            logState();
         }
 
         // Toggle a specific dot by key (1–4)
@@ -166,6 +184,8 @@
                 dot.element.style.display = 'block';
                 dot.element.style.backgroundColor = dot.color;
             }
+
+            logState();
         }
 
         // Flash the frame with the given color for a short time
