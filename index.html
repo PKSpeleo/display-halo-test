@@ -12,6 +12,7 @@
             height: 100%;
             background: #000000; /* Absolutely black background for halo/blooming tests */
             overflow: hidden;    /* No scrollbars */
+            touch-action: none;  /* Disable browser scrolling/zooming to keep pointer events stable */
         }
 
         /* Fullscreen black wrapper – main test area for observing halos / local dimming behavior */
@@ -24,6 +25,7 @@
             background: #000000; /* Absolutely black background */
             overflow: hidden;
             z-index: 0;
+            touch-action: none;  /* Important for mobile: keep pointer events, do not scroll */
         }
 
         /* Frame drawn as a single border (under pixels), used to check uniformity near screen edges */
@@ -65,7 +67,7 @@
             z-index: 2; /* Under moving pixels, above frame */
         }
 
-        /* Pointer-controlled square push box (100x100 physical px with inner rainbow frame).
+        /* Pointer-controlled square push box (200x200 physical px with inner rainbow frame).
            Used to "kick" pixels and observe halos while everything moves. */
         #pushBox {
             position: absolute;
@@ -203,7 +205,7 @@
         let prevPushBoxX = 0;
         let prevPushBoxY = 0;
         let pushBoxPointerId = null;
-        const pushBoxSidePhysical = 100;   // side length in physical pixels
+        const pushBoxSidePhysical = 200;   // side length in physical pixels (changed to 200)
         const pushBoxBorderPhysical = 20;  // border thickness in physical pixels
         const pushBoxRestitution = 0.5;    // elasticity coefficient for collisions with push box
         let lastPushBoxVx = 0;             // last frame velocity in CSS px/frame
@@ -861,6 +863,16 @@
             event.preventDefault();
 
             pushBoxPointerId = event.pointerId;
+
+            // Keep receiving pointer events even if the pointer moves fast
+            if (wrapper.setPointerCapture) {
+                try {
+                    wrapper.setPointerCapture(event.pointerId);
+                } catch (e) {
+                    // Ignore if capture is not supported
+                }
+            }
+
             updatePushBoxFromEvent(event);
 
             prevPushBoxX = pushBoxX;
@@ -900,6 +912,15 @@
             if (event.pointerId !== pushBoxPointerId) return;
 
             event.preventDefault();
+
+            // Release capture on pointer end if supported
+            if (wrapper.releasePointerCapture) {
+                try {
+                    wrapper.releasePointerCapture(event.pointerId);
+                } catch (e) {
+                    // Ignore if not captured
+                }
+            }
 
             pushBoxActive = false;
             pushBoxPointerId = null;
