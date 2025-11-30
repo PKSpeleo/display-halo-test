@@ -1155,11 +1155,9 @@
 
                         // Push dot out of the box along collision normal
                         if (nx !== 0) {
-                            const correction = overlapX;
-                            dot.x += nx * correction;
+                            dot.x += nx * overlapX;
                         } else if (ny !== 0) {
-                            const correction = overlapY;
-                            dot.y += ny * correction;
+                            dot.y += ny * overlapY;
                         }
 
                         // Reflect velocity relative to moving box along the normal with restitution
