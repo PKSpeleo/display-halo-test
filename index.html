@@ -47,7 +47,7 @@
             width: 1px;   /* Initial value, overridden by JS */
             height: 1px;  /* Initial value, overridden by JS */
             background-color: #FFFFFF;
-            display: none;  /* Toggled by number keys 1–4 */
+            display: none;  /* Toggled by number keys 1–4 and 5-group */
             pointer-events: none;
         }
 
@@ -81,7 +81,7 @@
     <!-- Inner frame that can blink on collisions -->
     <div id="frame"></div>
 
-    <!-- HUD with status info (bottom-right corner) -->
+    <!-- HUD with status info in the bottom-right corner -->
     <div id="hud"></div>
 </div>
 
@@ -91,13 +91,15 @@
         const frame = document.getElementById('frame');
         const hud = document.getElementById('hud');
 
-        // Dot configuration per key
+        // Dot configuration per key (single pixels 1–4)
         const dotConfigs = {
             '1': { id: 'dot1', color: '#FF0000' }, // Red
             '2': { id: 'dot2', color: '#00FF00' }, // Green
             '3': { id: 'dot3', color: '#00FFFF' }, // Cyan (Blue-like)
             '4': { id: 'dot4', color: '#FFFFFF' }  // White
         };
+
+        const SINGLE_KEYS = ['1', '2', '3', '4'];
 
         // Human-readable labels with colors
         const dotLabels = {
@@ -107,8 +109,19 @@
             '4': '4 (W)'
         };
 
-        // State for each dot (position, velocity, etc.)
+        // Group "5" label (10 colour pixels)
+        const COLOR_GROUP_LABEL_KEY = '5';
+        const COLOR_GROUP_LABEL_TEXT = '5 (10 colour pixels)';
+        const COLOR_GROUP_LABEL_COLOR = '#FF00FF'; // label color in HUD/console
+
+        const COLOR_GROUP_COUNT = 10;
+
+        // All dots (single + group) keyed by unique string
         const dots = {};
+
+        // Dedicated storage for group-5 dots
+        const colorGroupDots = [];
+        let colorGroupActive = false; // default off
 
         // Viewport size in CSS pixels
         let viewportWidth = 0;
@@ -129,7 +142,7 @@
         let frameFlashEndTime = 0;          // Timestamp when flash should end
         let frameFlashActive = false;       // True while flash is active
 
-        // Initialize dots map (center-based coordinates)
+        // Initialize single dots 1–4 (center-based coordinates)
         for (const key in dotConfigs) {
             const cfg = dotConfigs[key];
             const el = document.getElementById(cfg.id);
@@ -141,8 +154,72 @@
                 x: 0,  // center x
                 y: 0,  // center y
                 vx: 0,
-                vy: 0
+                vy: 0,
+                groupKey: null
             };
+        }
+
+        // hsv(0..1, 0..1, 0..1) -> 'rgb(r,g,b)'
+        function hsvToRgbCss(h, s, v) {
+            let r, g, b;
+            const i = Math.floor(h * 6);
+            const f = h * 6 - i;
+            const p = v * (1 - s);
+            const q = v * (1 - f * s);
+            const t = v * (1 - (1 - f) * s);
+
+            switch (i % 6) {
+                case 0: r = v; g = t; b = p; break;
+                case 1: r = q; g = v; b = p; break;
+                case 2: r = p; g = v; b = t; break;
+                case 3: r = p; g = q; b = v; break;
+                case 4: r = t; g = p; b = v; break;
+                case 5: r = v; g = p; b = q; break;
+            }
+
+            const R = Math.round(r * 255);
+            const G = Math.round(g * 255);
+            const B = Math.round(b * 255);
+            return 'rgb(' + R + ',' + G + ',' + B + ')';
+        }
+
+        // Build a vivid distinct palette of N colors (full saturation and value)
+        function buildVividPalette(count) {
+            const colors = [];
+            for (let i = 0; i < count; i++) {
+                const h = i / count;   // evenly spaced hue
+                const s = 1.0;         // full saturation
+                const v = 1.0;         // full brightness
+                colors.push(hsvToRgbCss(h, s, v));
+            }
+            return colors;
+        }
+
+        // Create color group dots (for key 5) if not yet created
+        function createColorGroupDotsIfNeeded() {
+            if (colorGroupDots.length > 0) return;
+
+            for (let i = 0; i < COLOR_GROUP_COUNT; i++) {
+                const el = document.createElement('div');
+                el.className = 'pixel-dot';
+                wrapper.appendChild(el);
+
+                const dotKey = '5_' + i;
+                const dot = {
+                    key: dotKey,
+                    element: el,
+                    color: '#FFFFFF', // will be overridden when group is activated
+                    active: false,
+                    x: 0,
+                    y: 0,
+                    vx: 0,
+                    vy: 0,
+                    groupKey: COLOR_GROUP_LABEL_KEY
+                };
+
+                colorGroupDots.push(dot);
+                dots[dotKey] = dot;
+            }
         }
 
         // Helper: current pixel size in CSS px
@@ -166,17 +243,26 @@
 
         // Log current state to the console and update HUD HTML (with colored pixel labels)
         function logState() {
-            const activeKeys = [];
-            for (const key in dots) {
-                if (dots[key].active) {
-                    activeKeys.push(key);
+            const sizeCss = getPixelSizeCss();
+            const approxPhysical = pixelScale;
+
+            // Active singles (1–4)
+            const activeSingleKeys = [];
+            for (const key of SINGLE_KEYS) {
+                const dot = dots[key];
+                if (dot && dot.active) {
+                    activeSingleKeys.push(key);
                 }
             }
 
-            const activeLabels = activeKeys.map(k => dotLabels[k] || k);
+            // Group 5 active?
+            const groupActive = colorGroupActive && colorGroupDots.some(d => d.active);
 
-            const sizeCss = getPixelSizeCss();
-            const approxPhysical = pixelScale;
+            const activeLabelsForLine = [];
+            activeSingleKeys.forEach(k => activeLabelsForLine.push(dotLabels[k] || k));
+            if (groupActive) {
+                activeLabelsForLine.push(COLOR_GROUP_LABEL_TEXT);
+            }
 
             const stateLines = [
                 'Frame base visible: ' + frameBaseVisible,
@@ -192,17 +278,29 @@
             stateLines.forEach(line => console.log(line));
             console.log(
                 'Active pixels: ' +
-                (activeLabels.length ? activeLabels.join(', ') : 'none')
+                (activeLabelsForLine.length ? activeLabelsForLine.join(', ') : 'none')
             );
 
-            if (activeKeys.length) {
+            // Colored console output
+            if (activeSingleKeys.length || groupActive) {
                 let line = 'Active pixels colored: ';
                 const styles = [];
-                activeKeys.forEach((k, index) => {
-                    const label = dotLabels[k] || k;
-                    line += (index === 0 ? '%c' : ', %c') + label;
-                    styles.push('color: ' + dots[k].color + ';');
-                });
+                let first = true;
+
+                // Singles 1–4
+                for (const key of activeSingleKeys) {
+                    const label = dotLabels[key] || key;
+                    line += (first ? '%c' : ', %c') + label;
+                    styles.push('color: ' + dots[key].color + ';');
+                    first = false;
+                }
+
+                // Group 5 label
+                if (groupActive) {
+                    line += (first ? '%c' : ', %c') + COLOR_GROUP_LABEL_TEXT;
+                    styles.push('color: ' + COLOR_GROUP_LABEL_COLOR + ';');
+                }
+
                 console.log(line, ...styles);
             } else {
                 console.log('Active pixels colored: none');
@@ -215,13 +313,26 @@
             hudLines.push('Frame base visible: ' + frameBaseVisible);
             hudLines.push('Frame flash active: ' + frameFlashActive);
 
-            if (activeKeys.length) {
-                const coloredParts = activeKeys.map(k =>
-                    '<span style="color:' + dots[k].color + ';">' +
-                    (dotLabels[k] || k) +
+            const hudParts = [];
+            // Singles
+            for (const key of activeSingleKeys) {
+                const label = dotLabels[key] || key;
+                const color = dots[key].color;
+                hudParts.push(
+                    '<span style="color:' + color + ';">' + label + '</span>'
+                );
+            }
+            // Group 5
+            if (groupActive) {
+                hudParts.push(
+                    '<span style="color:' + COLOR_GROUP_LABEL_COLOR + ';">' +
+                    COLOR_GROUP_LABEL_TEXT +
                     '</span>'
                 );
-                hudLines.push('Active pixels: ' + coloredParts.join(', '));
+            }
+
+            if (hudParts.length) {
+                hudLines.push('Active pixels: ' + hudParts.join(', '));
             } else {
                 hudLines.push('Active pixels: none');
             }
@@ -357,6 +468,50 @@
             logState();
         }
 
+        // Toggle group 5 (10 vivid colour pixels)
+        function toggleColorGroup() {
+            createColorGroupDotsIfNeeded();
+            // Ensure new dots get current size immediately
+            updatePixelSizes();
+
+            colorGroupActive = !colorGroupActive;
+
+            if (colorGroupActive) {
+                // Build vivid palette (all bright & distinct)
+                const palette = buildVividPalette(COLOR_GROUP_COUNT);
+
+                const sizeCss = getPixelSizeCss();
+                const half = sizeCss / 2;
+                const minX = half;
+                const maxX = viewportWidth - half;
+                const minY = half;
+                const maxY = viewportHeight - half;
+
+                colorGroupDots.forEach((dot, index) => {
+                    dot.active = true;
+                    dot.color = palette[index % palette.length];
+                    dot.x = Math.random() * (maxX - minX) + minX;
+                    dot.y = Math.random() * (maxY - minY) + minY;
+
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 0.75;
+                    dot.vx = Math.cos(angle) * speed;
+                    dot.vy = Math.sin(angle) * speed;
+
+                    dot.element.style.display = 'block';
+                    dot.element.style.backgroundColor = dot.color;
+                });
+            } else {
+                // Deactivate group pixels
+                colorGroupDots.forEach(dot => {
+                    dot.active = false;
+                    dot.element.style.display = 'none';
+                });
+            }
+
+            logState();
+        }
+
         // Flash the frame with the given color for a short time
         function flashFrame(color) {
             frameFlashActive = true;
@@ -387,6 +542,13 @@
                 event.key === '3' || event.key === '4') {
                 event.preventDefault();
                 toggleDot(event.key);
+                return;
+            }
+
+            // 5 toggles group of 10 vivid colour pixels
+            if (event.key === '5') {
+                event.preventDefault();
+                toggleColorGroup();
                 return;
             }
 
@@ -439,7 +601,7 @@
 
                 let hitWall = false;
 
-                // Bounce from screen edges (independent of frame border width)
+                // Bounce from screen edges
                 if (dot.x <= minX) {
                     dot.x = minX;
                     dot.vx = Math.abs(dot.vx);
@@ -472,9 +634,9 @@
             requestAnimationFrame(animate);
         }
 
-        // Activate all dots by default at startup
+        // Activate all single dots (1–4) by default at startup
         function activateDefaultDots() {
-            for (const key of ['1', '2', '3', '4']) {
+            for (const key of SINGLE_KEYS) {
                 const dot = dots[key];
                 if (!dot) continue;
                 dot.active = true;
@@ -494,7 +656,7 @@
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('load', function () {
             resizeToViewport();
-            activateDefaultDots();
+            activateDefaultDots();   // 1–4 ON by default
             requestAnimationFrame(animate);
         });
         document.addEventListener('DOMContentLoaded', resizeToViewport);
