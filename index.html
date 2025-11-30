@@ -25,14 +25,14 @@
             overflow: hidden;
         }
 
-        /* Frame exactly on screen edge; border width is controlled via JS */
+        /* Frame drawn as a single border (reverted to original behavior) */
         #frame {
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
-            border: 1px solid #FFFFFF; /* Initial value, overridden by JS */
+            border: 1px solid #FFFFFF; /* Actual thickness is controlled via JS */
             box-sizing: border-box;
             background: transparent;
             display: none; /* Base visibility (toggled by Space key) */
@@ -47,7 +47,7 @@
             width: 1px;   /* Initial value, overridden by JS */
             height: 1px;  /* Initial value, overridden by JS */
             background-color: #FFFFFF;
-            display: none;  /* Toggled by number keys 1–4 and 5-group */
+            display: none;  /* Toggled by number keys 1–4, 5, 6 */
             pointer-events: none;
         }
 
@@ -78,7 +78,7 @@
     <div id="dot3" class="pixel-dot"></div> <!-- Blue -->
     <div id="dot4" class="pixel-dot"></div> <!-- White -->
 
-    <!-- Inner frame that can blink on collisions -->
+    <!-- Frame with border that can blink on collisions -->
     <div id="frame"></div>
 
     <!-- HUD with status info in the bottom-right corner -->
@@ -109,19 +109,28 @@
             '4': '4 (W)'
         };
 
-        // Group "5" label (10 colour pixels)
+        // Group "5" – vivid static colors
         const COLOR_GROUP_LABEL_KEY = '5';
         const COLOR_GROUP_LABEL_TEXT = '5 (10 colour pixels)';
         const COLOR_GROUP_LABEL_COLOR = '#FF00FF'; // label color in HUD/console
-
         const COLOR_GROUP_COUNT = 10;
 
-        // All dots (single + group) keyed by unique string
+        // Group "6" – animated colors
+        const ANIMATED_GROUP_LABEL_KEY = '6';
+        const ANIMATED_GROUP_LABEL_TEXT = '6 (10 animated colours)';
+        const ANIMATED_GROUP_LABEL_COLOR = '#FFA500'; // label color in HUD/console
+        const ANIMATED_GROUP_COUNT = 10;
+
+        // All dots (single + both groups) keyed by unique string
         const dots = {};
 
         // Dedicated storage for group-5 dots
         const colorGroupDots = [];
         let colorGroupActive = false; // default off
+
+        // Dedicated storage for group-6 animated dots
+        const animatedGroupDots = [];
+        let animatedGroupActive = false; // default off
 
         // Viewport size in CSS pixels
         let viewportWidth = 0;
@@ -155,7 +164,9 @@
                 y: 0,  // center y
                 vx: 0,
                 vy: 0,
-                groupKey: null
+                groupKey: null,
+                h: null,
+                hSpeed: 0
             };
         }
 
@@ -214,10 +225,41 @@
                     y: 0,
                     vx: 0,
                     vy: 0,
-                    groupKey: COLOR_GROUP_LABEL_KEY
+                    groupKey: COLOR_GROUP_LABEL_KEY,
+                    h: null,
+                    hSpeed: 0
                 };
 
                 colorGroupDots.push(dot);
+                dots[dotKey] = dot;
+            }
+        }
+
+        // Create animated group dots (for key 6) if not yet created
+        function createAnimatedGroupDotsIfNeeded() {
+            if (animatedGroupDots.length > 0) return;
+
+            for (let i = 0; i < ANIMATED_GROUP_COUNT; i++) {
+                const el = document.createElement('div');
+                el.className = 'pixel-dot';
+                wrapper.appendChild(el);
+
+                const dotKey = '6_' + i;
+                const dot = {
+                    key: dotKey,
+                    element: el,
+                    color: '#FFFFFF', // will be driven by HSV animation
+                    active: false,
+                    x: 0,
+                    y: 0,
+                    vx: 0,
+                    vy: 0,
+                    groupKey: ANIMATED_GROUP_LABEL_KEY,
+                    h: 0,
+                    hSpeed: 0
+                };
+
+                animatedGroupDots.push(dot);
                 dots[dotKey] = dot;
             }
         }
@@ -256,12 +298,20 @@
             }
 
             // Group 5 active?
-            const groupActive = colorGroupActive && colorGroupDots.some(d => d.active);
+            const group5Active =
+                colorGroupActive && colorGroupDots.some(d => d.active);
+
+            // Group 6 active?
+            const group6Active =
+                animatedGroupActive && animatedGroupDots.some(d => d.active);
 
             const activeLabelsForLine = [];
             activeSingleKeys.forEach(k => activeLabelsForLine.push(dotLabels[k] || k));
-            if (groupActive) {
+            if (group5Active) {
                 activeLabelsForLine.push(COLOR_GROUP_LABEL_TEXT);
+            }
+            if (group6Active) {
+                activeLabelsForLine.push(ANIMATED_GROUP_LABEL_TEXT);
             }
 
             const stateLines = [
@@ -282,7 +332,7 @@
             );
 
             // Colored console output
-            if (activeSingleKeys.length || groupActive) {
+            if (activeSingleKeys.length || group5Active || group6Active) {
                 let line = 'Active pixels colored: ';
                 const styles = [];
                 let first = true;
@@ -296,9 +346,16 @@
                 }
 
                 // Group 5 label
-                if (groupActive) {
+                if (group5Active) {
                     line += (first ? '%c' : ', %c') + COLOR_GROUP_LABEL_TEXT;
                     styles.push('color: ' + COLOR_GROUP_LABEL_COLOR + ';');
+                    first = false;
+                }
+
+                // Group 6 label
+                if (group6Active) {
+                    line += (first ? '%c' : ', %c') + ANIMATED_GROUP_LABEL_TEXT;
+                    styles.push('color: ' + ANIMATED_GROUP_LABEL_COLOR + ';');
                 }
 
                 console.log(line, ...styles);
@@ -323,10 +380,18 @@
                 );
             }
             // Group 5
-            if (groupActive) {
+            if (group5Active) {
                 hudParts.push(
                     '<span style="color:' + COLOR_GROUP_LABEL_COLOR + ';">' +
                     COLOR_GROUP_LABEL_TEXT +
+                    '</span>'
+                );
+            }
+            // Group 6
+            if (group6Active) {
+                hudParts.push(
+                    '<span style="color:' + ANIMATED_GROUP_LABEL_COLOR + ';">' +
+                    ANIMATED_GROUP_LABEL_TEXT +
                     '</span>'
                 );
             }
@@ -471,7 +536,6 @@
         // Toggle group 5 (10 vivid colour pixels)
         function toggleColorGroup() {
             createColorGroupDotsIfNeeded();
-            // Ensure new dots get current size immediately
             updatePixelSizes();
 
             colorGroupActive = !colorGroupActive;
@@ -502,8 +566,50 @@
                     dot.element.style.backgroundColor = dot.color;
                 });
             } else {
-                // Deactivate group pixels
+                // Deactivate group 5 pixels
                 colorGroupDots.forEach(dot => {
+                    dot.active = false;
+                    dot.element.style.display = 'none';
+                });
+            }
+
+            logState();
+        }
+
+        // Toggle group 6 (10 animated colour pixels)
+        function toggleAnimatedGroup() {
+            createAnimatedGroupDotsIfNeeded();
+            updatePixelSizes();
+
+            animatedGroupActive = !animatedGroupActive;
+
+            if (animatedGroupActive) {
+                const sizeCss = getPixelSizeCss();
+                const half = sizeCss / 2;
+                const minX = half;
+                const maxX = viewportWidth - half;
+                const minY = half;
+                const maxY = viewportHeight - half;
+
+                animatedGroupDots.forEach(dot => {
+                    dot.active = true;
+                    dot.h = Math.random(); // random starting hue
+                    dot.hSpeed = 0.0005 + Math.random() * 0.0015; // hue shift speed
+                    dot.color = hsvToRgbCss(dot.h, 1.0, 1.0);
+                    dot.x = Math.random() * (maxX - minX) + minX;
+                    dot.y = Math.random() * (maxY - minY) + minY;
+
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 0.75;
+                    dot.vx = Math.cos(angle) * speed;
+                    dot.vy = Math.sin(angle) * speed;
+
+                    dot.element.style.display = 'block';
+                    dot.element.style.backgroundColor = dot.color;
+                });
+            } else {
+                // Deactivate group 6 pixels
+                animatedGroupDots.forEach(dot => {
                     dot.active = false;
                     dot.element.style.display = 'none';
                 });
@@ -552,6 +658,13 @@
                 return;
             }
 
+            // 6 toggles group of 10 animated colour pixels
+            if (event.key === '6') {
+                event.preventDefault();
+                toggleAnimatedGroup();
+                return;
+            }
+
             // Increase pixel scale:
             //   - 'Equal' -> physical key near Backspace (US: =/+)
             //   - 'NumpadAdd' -> plus on numpad
@@ -595,6 +708,17 @@
             for (const key in dots) {
                 const dot = dots[key];
                 if (!dot.active) continue;
+
+                // Animated color update for group 6
+                if (dot.groupKey === ANIMATED_GROUP_LABEL_KEY &&
+                    typeof dot.h === 'number' &&
+                    typeof dot.hSpeed === 'number') {
+                    dot.h += dot.hSpeed;
+                    if (dot.h > 1) dot.h -= 1;
+                    const newColor = hsvToRgbCss(dot.h, 1.0, 1.0);
+                    dot.color = newColor;
+                    dot.element.style.backgroundColor = newColor;
+                }
 
                 dot.x += dot.vx;
                 dot.y += dot.vy;
