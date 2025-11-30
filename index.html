@@ -50,6 +50,24 @@
             display: none;  /* Toggled by number keys 1–4 */
             pointer-events: none;
         }
+
+        /* HUD with state info in the bottom-right corner (visible only when base frame is enabled) */
+        #hud {
+            position: absolute;
+            right: 8px;
+            bottom: 8px;
+            padding: 6px 8px;
+            background: rgba(0, 0, 0, 0.6);
+            color: #FFFFFF;
+            font-family: monospace;
+            font-size: 11px;
+            line-height: 1.4;
+            white-space: pre;
+            pointer-events: none;
+            display: none; /* Shown only when base frame is visible */
+            text-align: right;
+            max-width: 50%;
+        }
     </style>
 </head>
 <body>
@@ -62,19 +80,31 @@
 
     <!-- Inner frame that can blink on collisions -->
     <div id="frame"></div>
+
+    <!-- HUD with status info (bottom-right corner) -->
+    <div id="hud"></div>
 </div>
 
 <script>
     (function () {
         const wrapper = document.getElementById('wrapper');
         const frame = document.getElementById('frame');
+        const hud = document.getElementById('hud');
 
         // Dot configuration per key
         const dotConfigs = {
             '1': { id: 'dot1', color: '#FF0000' }, // Red
             '2': { id: 'dot2', color: '#00FF00' }, // Green
-            '3': { id: 'dot3', color: '#00FFFF' }, // Cyan
+            '3': { id: 'dot3', color: '#00FFFF' }, // Cyan (Blue-like)
             '4': { id: 'dot4', color: '#FFFFFF' }  // White
+        };
+
+        // Human-readable labels with colors
+        const dotLabels = {
+            '1': '1 (R)',
+            '2': '2 (G)',
+            '3': '3 (B)',
+            '4': '4 (W)'
         };
 
         // State for each dot (position, velocity, etc.)
@@ -87,6 +117,7 @@
         // Frame visibility and flashing
         let frameBaseVisible = false;       // Controlled by Space key
         const frameBaseColor = '#FFFFFF';
+        const hudBaseColor = '#FFFFFF';
         let frameFlashEndTime = 0;          // Timestamp when flash should end
         let frameFlashActive = false;       // True while flash is active
 
@@ -106,29 +137,47 @@
             };
         }
 
-        // Log current state to the console
+        // Log current state to the console and update HUD text
         function logState() {
-            const activeKeys = [];
+            const activeLabels = [];
             for (const key in dots) {
                 if (dots[key].active) {
-                    activeKeys.push(key);
+                    activeLabels.push(dotLabels[key] || key);
                 }
             }
+
+            const dpr = window.devicePixelRatio || 1;
+
+            const stateLines = [
+                'Frame base visible: ' + frameBaseVisible,
+                'Frame flash active: ' + frameFlashActive,
+                'Active pixels: ' + (activeLabels.length ? activeLabels.join(', ') : 'none'),
+                'Viewport: ' + viewportWidth + ' x ' + viewportHeight,
+                'devicePixelRatio: ' + dpr
+            ];
+
             console.log('--- STATE ---');
-            console.log('Frame base visible (Space):', frameBaseVisible);
-            console.log('Frame flash active:', frameFlashActive);
-            console.log('Active pixels (keys):', activeKeys.length ? activeKeys.join(', ') : 'none');
+            stateLines.forEach(line => console.log(line));
             console.log('---------------');
+
+            // Update HUD text; HUD visibility is controlled elsewhere
+            hud.textContent = stateLines.join('\n');
         }
 
-        // Apply base visibility to frame (only used when no flash is active)
+        // Apply base visibility to frame and HUD (only used when no flash is active)
         function applyBaseFrameVisibility() {
             if (frameBaseVisible) {
                 frame.style.display = 'block';
                 frame.style.borderColor = frameBaseColor;
+                hud.style.display = 'block';  // Show HUD when base frame is enabled
             } else {
                 frame.style.display = 'none';
                 frame.style.borderColor = frameBaseColor;
+                hud.style.display = 'none';   // Hide HUD when base frame is disabled
+            }
+            // When we apply base visibility, we also ensure base HUD color
+            if (!frameFlashActive) {
+                hud.style.color = hudBaseColor;
             }
         }
 
@@ -159,12 +208,12 @@
                 if (dot.y > viewportHeight) dot.y = viewportHeight;
             }
 
-            // Keep frame visibility consistent with base state when not flashing
+            // Keep frame and HUD visibility consistent with base state when not flashing
             if (!frameFlashActive) {
                 applyBaseFrameVisibility();
             }
 
-            // Log current state after resize
+            // Log current state after resize (also refresh HUD text)
             logState();
         }
 
@@ -214,6 +263,12 @@
             frameFlashActive = true;
             frame.style.display = 'block';      // Ensure it is visible for the flash
             frame.style.borderColor = color;    // Set flash color
+
+            // If HUD is visible (base frame is enabled), flash HUD text with the same color
+            if (frameBaseVisible) {
+                hud.style.color = color;
+            }
+
             frameFlashEndTime = performance.now() + 80; // Flash duration in ms
             logState();
         }
@@ -243,8 +298,10 @@
             if (frameFlashActive && frameFlashEndTime > 0 && now > frameFlashEndTime) {
                 frameFlashActive = false;
                 frameFlashEndTime = 0;
-                // Return to base frame state
+
+                // Return to base frame and HUD state
                 applyBaseFrameVisibility();
+                hud.style.color = hudBaseColor; // Reset HUD text color to base
                 logState();
             }
 
