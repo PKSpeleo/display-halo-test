@@ -52,7 +52,7 @@
             background-color: #FFFFFF;
             display: none;  /* Toggled by number keys 1–4, 5, 6 */
             pointer-events: none;
-            z-index: 2; /* Above frame, below HUD */
+            z-index: 3; /* Above frame and push box, below HUD */
         }
 
         /* Explosion wave (square ring) – visualizes transient bright “flashes” to study halo behavior */
@@ -62,7 +62,22 @@
             border-style: solid;
             background: transparent;
             pointer-events: none;
-            z-index: 1; /* Under moving pixels, above frame */
+            z-index: 2; /* Under moving pixels, above frame */
+        }
+
+        /* Pointer-controlled square push box (100x100 physical px with inner rainbow frame).
+           Used to "kick" pixels and observe halos while everything moves. */
+        #pushBox {
+            position: absolute;
+            width: 0;
+            height: 0;
+            box-sizing: border-box;
+            border-style: solid;
+            border-color: #FFFFFF;
+            background: transparent;
+            pointer-events: none;
+            display: none;
+            z-index: 2; /* Under pixels, above frame */
         }
 
         /* HUD with state info in the bottom-right corner (visible only when base frame is enabled) */
@@ -81,7 +96,7 @@
             display: none; /* Shown only when base frame is visible */
             text-align: right;
             max-width: 50%;
-            z-index: 3; /* On top of everything */
+            z-index: 4; /* On top of everything */
         }
     </style>
 </head>
@@ -101,6 +116,9 @@
          Real explosion rings are created dynamically via JavaScript. -->
     <div class="explosion" style="display:none;"></div>
 
+    <!-- Pointer-controlled square push box -->
+    <div id="pushBox"></div>
+
     <!-- HUD with status info in the bottom-right corner -->
     <div id="hud"></div>
 </div>
@@ -111,6 +129,7 @@
         const wrapper = document.getElementById('wrapper');
         const frame = document.getElementById('frame');
         const hud = document.getElementById('hud');
+        const pushBoxEl = document.getElementById('pushBox');
 
         // Dot configuration per key (single pixels 1–4)
         // These are primary test pixels for R/G/B/W halos on IPS / miniLED / OLED panels.
@@ -177,6 +196,20 @@
         let frameFlashEndTime = 0;          // Timestamp when flash should end
         let frameFlashActive = false;       // True while flash is active
 
+        // Pointer-controlled square push box
+        let pushBoxActive = false;
+        let pushBoxX = 0;    // center X
+        let pushBoxY = 0;    // center Y
+        let prevPushBoxX = 0;
+        let prevPushBoxY = 0;
+        let pushBoxPointerId = null;
+        const pushBoxSidePhysical = 100;   // side length in physical pixels
+        const pushBoxBorderPhysical = 20;  // border thickness in physical pixels
+        const pushBoxRestitution = 0.5;    // elasticity coefficient for collisions with push box
+        let lastPushBoxVx = 0;             // last frame velocity in CSS px/frame
+        let lastPushBoxVy = 0;
+        let pushBoxHue = 0;                // hue for rainbow border [0..1]
+
         // Initialize single dots 1–4 (properties; positions are set later)
         for (const key in dotConfigs) {
             const cfg = dotConfigs[key];
@@ -192,7 +225,10 @@
                 vy: 0,
                 groupKey: null,
                 h: null,
-                hSpeed: 0
+                hSpeed: 0,
+                captured: false,
+                captureOffsetX: 0,
+                captureOffsetY: 0
             };
         }
 
@@ -299,7 +335,10 @@
                     vy: 0,
                     groupKey: COLOR_GROUP_LABEL_KEY,
                     h: null,
-                    hSpeed: 0
+                    hSpeed: 0,
+                    captured: false,
+                    captureOffsetX: 0,
+                    captureOffsetY: 0
                 };
 
                 colorGroupDots.push(dot);
@@ -328,7 +367,10 @@
                     vy: 0,
                     groupKey: ANIMATED_GROUP_LABEL_KEY,
                     h: 0,
-                    hSpeed: 0
+                    hSpeed: 0,
+                    captured: false,
+                    captureOffsetX: 0,
+                    captureOffsetY: 0
                 };
 
                 animatedGroupDots.push(dot);
@@ -341,10 +383,18 @@
             return (1 / currentDpr) * pixelScale;
         }
 
+        // Helper: push box side and border in CSS px (from physical units)
+        function getPushBoxSideCss() {
+            return pushBoxSidePhysical / currentDpr;
+        }
+
+        function getPushBoxBorderCss() {
+            return pushBoxBorderPhysical / currentDpr;
+        }
+
         // Randomize direction and set position to screen center
         // All pixels start from the center, then move in random directions.
         function randomizeDotPositionAndVelocity(dot) {
-            // Place dot in the exact center of the viewport
             dot.x = viewportWidth / 2;
             dot.y = viewportHeight / 2;
 
@@ -355,7 +405,7 @@
             dot.vy = Math.sin(angle) * speed;
         }
 
-        // Update CSS sizes for frame border and dot size based on DPR and pixelScale
+        // Update CSS sizes for frame border, dot size and push box based on DPR and pixelScale
         function updatePixelSizes() {
             baseUnit = 1 / currentDpr;
             const sizeCss = getPixelSizeCss();
@@ -367,6 +417,16 @@
                 const dot = dots[key];
                 dot.element.style.width = sizeCss + 'px';
                 dot.element.style.height = sizeCss + 'px';
+            }
+
+            if (pushBoxActive) {
+                const sideCss = getPushBoxSideCss();
+                const borderCss = getPushBoxBorderCss();
+                pushBoxEl.style.width = sideCss + 'px';
+                pushBoxEl.style.height = sideCss + 'px';
+                pushBoxEl.style.borderWidth = borderCss + 'px';
+                pushBoxEl.style.transform =
+                    'translate(' + (pushBoxX - sideCss / 2) + 'px, ' + (pushBoxY - sideCss / 2) + 'px)';
             }
         }
 
@@ -404,6 +464,7 @@
             const stateLines = [
                 'Frame base visible: ' + frameBaseVisible,
                 'Frame flash active: ' + frameFlashActive,
+                'Push box active: ' + pushBoxActive,
                 'Viewport: ' + viewportWidth + ' x ' + viewportHeight,
                 'devicePixelRatio: ' + currentDpr,
                 'Pixel scale: ' + pixelScale +
@@ -456,6 +517,7 @@
             const hudLines = [];
             hudLines.push('Frame base visible: ' + frameBaseVisible);
             hudLines.push('Frame flash active: ' + frameFlashActive);
+            hudLines.push('Push box active: ' + pushBoxActive);
 
             const hudParts = [];
             // Singles
@@ -531,7 +593,7 @@
             console.log('Viewport (window.innerWidth x window.innerHeight): ' +
                 viewportWidth + ' x ' + viewportHeight);
             console.log('devicePixelRatio:', currentDpr);
-            console.log('Note: border and pixel size are tied to devicePixelRatio.');
+            console.log('Note: border, pixel size and push box size are tied to devicePixelRatio.');
 
             // Clamp active dots to stay fully on screen
             const sizeCss = getPixelSizeCss();
@@ -761,7 +823,101 @@
             }
         }
 
-        // Animation loop: bounce from SCREEN EDGES, collide as squares, explosions
+        // Capture all dots that are inside the push box at the moment of press
+        function captureDotsInsidePushBox() {
+            const sideCss = getPushBoxSideCss();
+            const sizeCss = getPixelSizeCss();
+            const halfDot = sizeCss / 2;
+            const halfBox = sideCss / 2;
+            const limitX = halfBox + halfDot;
+            const limitY = halfBox + halfDot;
+
+            for (const key in dots) {
+                const dot = dots[key];
+                if (!dot.active) continue;
+
+                const dx = dot.x - pushBoxX;
+                const dy = dot.y - pushBoxY;
+
+                if (Math.abs(dx) <= limitX && Math.abs(dy) <= limitY) {
+                    dot.captured = true;
+                    dot.captureOffsetX = dx;
+                    dot.captureOffsetY = dy;
+                }
+            }
+        }
+
+        // Pointer helpers (mouse/touch)
+        function updatePushBoxFromEvent(event) {
+            const rect = wrapper.getBoundingClientRect();
+            pushBoxX = event.clientX - rect.left;
+            pushBoxY = event.clientY - rect.top;
+        }
+
+        function handlePointerDown(event) {
+            // Start tracking only primary pointer (to keep things simple on touch)
+            if (pushBoxPointerId !== null) return;
+
+            event.preventDefault();
+
+            pushBoxPointerId = event.pointerId;
+            updatePushBoxFromEvent(event);
+
+            prevPushBoxX = pushBoxX;
+            prevPushBoxY = pushBoxY;
+
+            pushBoxActive = true;
+
+            const sideCss = getPushBoxSideCss();
+            const borderCss = getPushBoxBorderCss();
+            pushBoxEl.style.width = sideCss + 'px';
+            pushBoxEl.style.height = sideCss + 'px';
+            pushBoxEl.style.borderWidth = borderCss + 'px';
+            pushBoxEl.style.display = 'block';
+            pushBoxEl.style.transform =
+                'translate(' + (pushBoxX - sideCss / 2) + 'px, ' + (pushBoxY - sideCss / 2) + 'px)';
+
+            // Capture pixels already inside the box
+            captureDotsInsidePushBox();
+
+            logState();
+        }
+
+        function handlePointerMove(event) {
+            if (!pushBoxActive) return;
+            if (event.pointerId !== pushBoxPointerId) return;
+
+            event.preventDefault();
+            updatePushBoxFromEvent(event);
+
+            const sideCss = getPushBoxSideCss();
+            pushBoxEl.style.transform =
+                'translate(' + (pushBoxX - sideCss / 2) + 'px, ' + (pushBoxY - sideCss / 2) + 'px)';
+        }
+
+        function handlePointerUpOrCancel(event) {
+            if (!pushBoxActive) return;
+            if (event.pointerId !== pushBoxPointerId) return;
+
+            event.preventDefault();
+
+            pushBoxActive = false;
+            pushBoxPointerId = null;
+            pushBoxEl.style.display = 'none';
+
+            // Release captured dots with velocity equal to the last push box velocity
+            for (const key in dots) {
+                const dot = dots[key];
+                if (!dot.captured) continue;
+                dot.captured = false;
+                dot.vx = lastPushBoxVx;
+                dot.vy = lastPushBoxVy;
+            }
+
+            logState();
+        }
+
+        // Animation loop: bounce from SCREEN EDGES, collide as squares, explosions, push-box interaction
         function animate() {
             const now = performance.now();
 
@@ -776,12 +932,46 @@
             }
 
             const sizeCss = getPixelSizeCss();
-            const half = sizeCss / 2;
+            const halfDot = sizeCss / 2;
 
-            const minX = half;                     // inner screen edge (left)
-            const maxX = viewportWidth - half;     // inner screen edge (right)
-            const minY = half;                     // inner screen edge (top)
-            const maxY = viewportHeight - half;    // inner screen edge (bottom)
+            const minX = halfDot;                     // inner screen edge (left)
+            const maxX = viewportWidth - halfDot;     // inner screen edge (right)
+            const minY = halfDot;                     // inner screen edge (top)
+            const maxY = viewportHeight - halfDot;    // inner screen edge (bottom)
+
+            // Update push box velocity this frame (in CSS px per frame) and color
+            let pushBoxVx = 0;
+            let pushBoxVy = 0;
+            let pushBoxColor = hsvToRgbCss(pushBoxHue, 1.0, 1.0);
+            if (pushBoxActive) {
+                pushBoxVx = pushBoxX - prevPushBoxX;
+                pushBoxVy = pushBoxY - prevPushBoxY;
+                prevPushBoxX = pushBoxX;
+                prevPushBoxY = pushBoxY;
+
+                lastPushBoxVx = pushBoxVx;
+                lastPushBoxVy = pushBoxVy;
+
+                const sideCss = getPushBoxSideCss();
+                const borderCss = getPushBoxBorderCss();
+                pushBoxEl.style.width = sideCss + 'px';
+                pushBoxEl.style.height = sideCss + 'px';
+                pushBoxEl.style.borderWidth = borderCss + 'px';
+                pushBoxEl.style.transform =
+                    'translate(' + (pushBoxX - sideCss / 2) + 'px, ' + (pushBoxY - sideCss / 2) + 'px)';
+                pushBoxEl.style.borderColor = pushBoxColor;
+            } else {
+                lastPushBoxVx = 0;
+                lastPushBoxVy = 0;
+            }
+
+            // Animate hue for the box border (rainbow effect)
+            pushBoxHue += 0.003;
+            if (pushBoxHue > 1) pushBoxHue -= 1;
+            pushBoxColor = hsvToRgbCss(pushBoxHue, 1.0, 1.0);
+            if (pushBoxActive) {
+                pushBoxEl.style.borderColor = pushBoxColor;
+            }
 
             const activeDots = [];
 
@@ -789,6 +979,19 @@
             for (const key in dots) {
                 const dot = dots[key];
                 if (!dot.active) continue;
+
+                if (dot.captured && pushBoxActive) {
+                    // Captured dots follow the box with their stored offset
+                    dot.x = pushBoxX + dot.captureOffsetX;
+                    dot.y = pushBoxY + dot.captureOffsetY;
+                    activeDots.push(dot);
+                    continue;
+                }
+
+                // If somehow captured but box is not active, drop capture state
+                if (dot.captured && !pushBoxActive) {
+                    dot.captured = false;
+                }
 
                 // Animated color update for group 6
                 if (dot.groupKey === ANIMATED_GROUP_LABEL_KEY &&
@@ -901,13 +1104,91 @@
                 }
             }
 
-            // Third pass: apply CSS transforms based on updated positions
-            for (const dot of activeDots) {
-                dot.element.style.transform =
-                    'translate(' + (dot.x - half) + 'px, ' + (dot.y - half) + 'px)';
+            // Third pass: interaction with push box as square (AABB) + explosions
+            if (pushBoxActive) {
+                const sideCss = getPushBoxSideCss();
+                const halfBox = sideCss / 2;
+                const halfDotSize = halfDot;
+
+                for (const dot of activeDots) {
+                    if (dot.captured) continue; // captured pixels just follow box
+
+                    const dx = dot.x - pushBoxX;
+                    const dy = dot.y - pushBoxY;
+
+                    // Minkowski sum: check overlap between big box and dot square
+                    const overlapX = (halfBox + halfDotSize) - Math.abs(dx);
+                    const overlapY = (halfBox + halfDotSize) - Math.abs(dy);
+
+                    if (overlapX > 0 && overlapY > 0) {
+                        let cx, cy; // collision point on the box border
+                        let nx = 0, ny = 0; // collision normal
+
+                        if (overlapX < overlapY) {
+                            // Collision with left/right side
+                            if (dx > 0) {
+                                // Right side
+                                nx = 1;
+                                cx = pushBoxX + halfBox;
+                            } else {
+                                // Left side
+                                nx = -1;
+                                cx = pushBoxX - halfBox;
+                            }
+                            cy = dot.y;
+                        } else {
+                            // Collision with top/bottom side
+                            if (dy > 0) {
+                                // Bottom
+                                ny = 1;
+                                cy = pushBoxY + halfBox;
+                            } else {
+                                // Top
+                                ny = -1;
+                                cy = pushBoxY - halfBox;
+                            }
+                            cx = dot.x;
+                        }
+
+                        // Explosion color mixes pixel color and current box border color
+                        createExplosion(cx, cy, [dot.color, pushBoxColor]);
+
+                        // Push dot out of the box along collision normal
+                        if (nx !== 0) {
+                            const correction = overlapX;
+                            dot.x += nx * correction;
+                        } else if (ny !== 0) {
+                            const correction = overlapY;
+                            dot.y += ny * correction;
+                        }
+
+                        // Reflect velocity relative to moving box along the normal with restitution
+                        const relVx = dot.vx - pushBoxVx;
+                        const relVy = dot.vy - pushBoxVy;
+                        const relDot = relVx * nx + relVy * ny; // projection on normal
+
+                        // v' = v - (1 + e) * (v·n) * n
+                        const factor = (1 + pushBoxRestitution) * relDot;
+                        const newRelVx = relVx - factor * nx;
+                        const newRelVy = relVy - factor * ny;
+
+                        dot.vx = newRelVx + pushBoxVx;
+                        dot.vy = newRelVy + pushBoxVy;
+
+                        // Clamp back into screen bounds after correction
+                        dot.x = Math.max(minX, Math.min(maxX, dot.x));
+                        dot.y = Math.max(minY, Math.min(maxY, dot.y));
+                    }
+                }
             }
 
-            // Fourth pass: update explosions (square wave expanding over time)
+            // Fourth pass: apply CSS transforms based on updated positions
+            for (const dot of activeDots) {
+                dot.element.style.transform =
+                    'translate(' + (dot.x - halfDot) + 'px, ' + (dot.y - halfDot) + 'px)';
+            }
+
+            // Fifth pass: update explosions (square wave expanding over time)
             const toRemove = [];
             for (let i = 0; i < explosions.length; i++) {
                 const ex = explosions[i];
@@ -948,6 +1229,14 @@
         // Event listeners
         window.addEventListener('resize', resizeToViewport);
         window.addEventListener('keydown', handleKeyDown);
+
+        // Pointer events for mouse/touch
+        wrapper.addEventListener('pointerdown', handlePointerDown);
+        wrapper.addEventListener('pointermove', handlePointerMove);
+        wrapper.addEventListener('pointerup', handlePointerUpOrCancel);
+        wrapper.addEventListener('pointercancel', handlePointerUpOrCancel);
+        wrapper.addEventListener('pointerleave', handlePointerUpOrCancel);
+
         window.addEventListener('load', function () {
             resizeToViewport();
             // Default behaviour: only mode 6 (animated colour pixels) is enabled
