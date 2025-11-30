@@ -945,28 +945,12 @@
             requestAnimationFrame(animate);
         }
 
-        // Activate all single dots (1–4) by default at startup (center start, random direction)
-        function activateDefaultDots() {
-            for (const key of SINGLE_KEYS) {
-                const dot = dots[key];
-                if (!dot) continue;
-                dot.active = true;
-                randomizeDotPositionAndVelocity(dot);
-                dot.element.style.display = 'block';
-                dot.element.style.backgroundColor = dot.color;
-            }
-            logState();
-        }
-
         // Event listeners
         window.addEventListener('resize', resizeToViewport);
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('load', function () {
             resizeToViewport();
-            // 1–4 ON by default
-            activateDefaultDots();
-            // 5 & 6 ON by default for more complex halo tests
-            toggleColorGroup();
+            // Default behaviour: only mode 6 (animated colour pixels) is enabled
             toggleAnimatedGroup();
             requestAnimationFrame(animate);
         });
