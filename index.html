@@ -26,7 +26,7 @@
             z-index: 0;
         }
 
-        /* Frame drawn as a single border (original behavior, under pixels) */
+        /* Frame drawn as a single border (under pixels) */
         #frame {
             position: absolute;
             top: 0;
@@ -82,7 +82,7 @@
     <div id="dot3" class="pixel-dot"></div> <!-- Blue -->
     <div id="dot4" class="pixel-dot"></div> <!-- White -->
 
-    <!-- Frame with border that can blink on collisions -->
+    <!-- Frame with border that can blink on collisions with walls -->
     <div id="frame"></div>
 
     <!-- HUD with status info in the bottom-right corner -->
@@ -602,7 +602,7 @@
             logState();
         }
 
-        // Flash the frame with the given color for a short time
+        // Flash the frame with the given color for a short time (wall collisions)
         function flashFrame(color) {
             frameFlashActive = true;
             frame.style.display = 'block';
@@ -668,7 +668,7 @@
             }
         }
 
-        // Animation loop: bounce from SCREEN EDGES (not frame)
+        // Animation loop: bounce from SCREEN EDGES and from each other (square collisions)
         function animate() {
             const now = performance.now();
 
@@ -689,6 +689,9 @@
             const minY = half;                     // inner screen edge (top)
             const maxY = viewportHeight - half;    // inner screen edge (bottom)
 
+            const activeDots = [];
+
+            // First pass: move dots, handle wall collisions, update animated colors
             for (const key in dots) {
                 const dot = dots[key];
                 if (!dot.active) continue;
@@ -734,7 +737,71 @@
                     flashFrame(dot.color);
                 }
 
-                // Translate from center coordinates to top-left for CSS positioning
+                activeDots.push(dot);
+            }
+
+            // Second pass: handle collisions between dots as squares (AABB)
+            for (let i = 0; i < activeDots.length; i++) {
+                const a = activeDots[i];
+                for (let j = i + 1; j < activeDots.length; j++) {
+                    const b = activeDots[j];
+
+                    const dx = b.x - a.x;
+                    const dy = b.y - a.y;
+
+                    // Check overlap of two squares (AABB in center-coordinates form)
+                    if (Math.abs(dx) < sizeCss && Math.abs(dy) < sizeCss) {
+                        // Compute overlap along each axis
+                        const overlapX = sizeCss - Math.abs(dx);
+                        const overlapY = sizeCss - Math.abs(dy);
+
+                        if (overlapX < overlapY) {
+                            // Resolve along X axis
+                            const correction = overlapX / 2;
+                            if (dx > 0) {
+                                // b is to the right of a
+                                a.x -= correction;
+                                b.x += correction;
+                            } else {
+                                // b is to the left of a
+                                a.x += correction;
+                                b.x -= correction;
+                            }
+
+                            // Elastic collision along X: swap vx
+                            const tmpVx = a.vx;
+                            a.vx = b.vx;
+                            b.vx = tmpVx;
+                        } else {
+                            // Resolve along Y axis
+                            const correction = overlapY / 2;
+                            if (dy > 0) {
+                                // b is below a
+                                a.y -= correction;
+                                b.y += correction;
+                            } else {
+                                // b is above a
+                                a.y += correction;
+                                b.y -= correction;
+                            }
+
+                            // Elastic collision along Y: swap vy
+                            const tmpVy = a.vy;
+                            a.vy = b.vy;
+                            b.vy = tmpVy;
+                        }
+
+                        // Clamp back into screen bounds after correction
+                        a.x = Math.max(minX, Math.min(maxX, a.x));
+                        a.y = Math.max(minY, Math.min(maxY, a.y));
+                        b.x = Math.max(minX, Math.min(maxX, b.x));
+                        b.y = Math.max(minY, Math.min(maxY, b.y));
+                    }
+                }
+            }
+
+            // Third pass: apply CSS transforms based on updated positions
+            for (const dot of activeDots) {
                 dot.element.style.transform =
                     'translate(' + (dot.x - half) + 'px, ' + (dot.y - half) + 'px)';
             }
