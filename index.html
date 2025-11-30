@@ -155,7 +155,7 @@
         let frameFlashEndTime = 0;          // Timestamp when flash should end
         let frameFlashActive = false;       // True while flash is active
 
-        // Initialize single dots 1–4 (center-based coordinates, will be randomized later)
+        // Initialize single dots 1–4 (properties; positions are set later)
         for (const key in dotConfigs) {
             const cfg = dotConfigs[key];
             const el = document.getElementById(cfg.id);
@@ -273,18 +273,16 @@
             return (1 / currentDpr) * pixelScale;
         }
 
-        // Randomize position and velocity for a dot (fully inside screen)
+        // Randomize direction and set position to screen center
         function randomizeDotPositionAndVelocity(dot) {
             const sizeCss = getPixelSizeCss();
             const half = sizeCss / 2;
-            const minX = half;
-            const maxX = viewportWidth - half;
-            const minY = half;
-            const maxY = viewportHeight - half;
 
-            dot.x = Math.random() * (maxX - minX) + minX;
-            dot.y = Math.random() * (maxY - minY) + minY;
+            // Place dot in the exact center of the viewport
+            dot.x = viewportWidth / 2;
+            dot.y = viewportHeight / 2;
 
+            // Random direction (angle) and fixed speed
             const angle = Math.random() * Math.PI * 2;
             const speed = 0.75;
             dot.vx = Math.cos(angle) * speed;
@@ -744,7 +742,7 @@
             requestAnimationFrame(animate);
         }
 
-        // Activate all single dots (1–4) by default at startup (random positions and directions)
+        // Activate all single dots (1–4) by default at startup (center start, random direction)
         function activateDefaultDots() {
             for (const key of SINGLE_KEYS) {
                 const dot = dots[key];
@@ -761,7 +759,7 @@
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('load', function () {
             resizeToViewport();
-            activateDefaultDots();   // 1–4 ON by default, random positions/directions
+            activateDefaultDots();   // 1–4 ON by default, start from center
             requestAnimationFrame(animate);
         });
         document.addEventListener('DOMContentLoaded', resizeToViewport);
