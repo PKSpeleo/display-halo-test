@@ -19,6 +19,7 @@ Because it is a single self-contained HTML file, it can be hosted for free on **
     - [Pixel size / halo scale](#pixel-size--halo-scale)
     - [Fun interaction mode (catch & kick pixels)](#fun-interaction-mode-catch--kick-pixels)
 - [How to use it in practice](#how-to-use-it-in-practice)
+- [Disclaimer](#disclaimer)
 - [Notes](#notes)
 
 ---
@@ -185,6 +186,18 @@ Some ideas for testing:
 - Use the **fun interaction mode**:
     - Catch a pixel with the square, fling it across the screen and follow the halo.
     - On mobile, use **two fingers** to bounce pixels between two squares and watch how local dimming reacts.
+
+---
+
+## Disclaimer
+
+Yes, this is one big single-file **code monster** with a lot of “not-the-best-architected” JavaScript inside.  
+It was written **very quickly, on the fly**, just to solve a concrete task:
+
+> “Show bright pixels on an absolutely black background and let me watch how the backlight / halos behave.”
+
+It does exactly that, it already served its purpose well, and it is **very unlikely to receive serious refactoring or future updates**.  
+Treat it as a useful hack / lab tool rather than a reference implementation of clean code. 😉
 
 ---
 
