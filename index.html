@@ -25,27 +25,27 @@
             overflow: hidden;
         }
 
-        /* Inner border (hairline) to approximate 1 physical pixel on Retina */
+        /* Inner border; actual width is controlled via JS */
         #frame {
             position: absolute;
             top: 1px;
             left: 1px;
             right: 1px;
             bottom: 1px;
-            border: 0.5px solid #FFFFFF; /* Absolutely white border (hairline) */
+            border: 1px solid #FFFFFF; /* Initial value, overridden by JS */
             box-sizing: border-box;
             background: transparent;
             display: none; /* Base visibility (toggled by Space key) */
             pointer-events: none;
         }
 
-        /* Moving pixel-like dots, also hairline-sized */
+        /* Moving pixel-like dots; actual size is controlled via JS */
         .pixel-dot {
             position: absolute;
             left: 0;
             top: 0;
-            width: 0.5px;   /* Hairline size: ~1 physical pixel on Retina */
-            height: 0.5px;  /* Hairline size: ~1 physical pixel on Retina */
+            width: 1px;   /* Initial value, overridden by JS */
+            height: 1px;  /* Initial value, overridden by JS */
             background-color: #FFFFFF;
             display: none;  /* Toggled by number keys 1–4 */
             pointer-events: none;
@@ -114,6 +114,13 @@
         let viewportWidth = 0;
         let viewportHeight = 0;
 
+        // devicePixelRatio-related sizing
+        let currentDpr = window.devicePixelRatio || 1;
+        let baseUnit = 1 / currentDpr;   // CSS px per "1 physical pixel" step
+        let pixelScale = 1;              // How many physical pixels thick (approx)
+        const minScale = 1;
+        const maxScale = 20;
+
         // Frame visibility and flashing
         let frameBaseVisible = false;       // Controlled by Space key
         const frameBaseColor = '#FFFFFF';
@@ -137,6 +144,20 @@
             };
         }
 
+        // Update CSS sizes for frame border and dot size based on DPR and pixelScale
+        function updatePixelSizes() {
+            baseUnit = 1 / currentDpr;
+            const sizeCss = baseUnit * pixelScale; // CSS px thickness
+
+            frame.style.borderWidth = sizeCss + 'px';
+
+            for (const key in dots) {
+                const dot = dots[key];
+                dot.element.style.width = sizeCss + 'px';
+                dot.element.style.height = sizeCss + 'px';
+            }
+        }
+
         // Log current state to the console and update HUD text
         function logState() {
             const activeLabels = [];
@@ -146,21 +167,24 @@
                 }
             }
 
-            const dpr = window.devicePixelRatio || 1;
+            const sizeCss = (1 / currentDpr) * pixelScale;
+            const approxPhysical = pixelScale; // By design: pixelScale ~ number of physical pixels
 
             const stateLines = [
                 'Frame base visible: ' + frameBaseVisible,
                 'Frame flash active: ' + frameFlashActive,
                 'Active pixels: ' + (activeLabels.length ? activeLabels.join(', ') : 'none'),
                 'Viewport: ' + viewportWidth + ' x ' + viewportHeight,
-                'devicePixelRatio: ' + dpr
+                'devicePixelRatio: ' + currentDpr,
+                'Pixel scale: ' + pixelScale +
+                ' (CSS px: ' + sizeCss.toFixed(3) +
+                ', approx physical px: ' + approxPhysical + ')'
             ];
 
             console.log('--- STATE ---');
             stateLines.forEach(line => console.log(line));
             console.log('---------------');
 
-            // Update HUD text; HUD visibility is controlled elsewhere
             hud.textContent = stateLines.join('\n');
         }
 
@@ -169,13 +193,12 @@
             if (frameBaseVisible) {
                 frame.style.display = 'block';
                 frame.style.borderColor = frameBaseColor;
-                hud.style.display = 'block';  // Show HUD when base frame is enabled
+                hud.style.display = 'block';
             } else {
                 frame.style.display = 'none';
                 frame.style.borderColor = frameBaseColor;
-                hud.style.display = 'none';   // Hide HUD when base frame is disabled
+                hud.style.display = 'none';
             }
-            // When we apply base visibility, we also ensure base HUD color
             if (!frameFlashActive) {
                 hud.style.color = hudBaseColor;
             }
@@ -185,20 +208,18 @@
             viewportWidth = window.innerWidth;
             viewportHeight = window.innerHeight;
 
-            // Set wrapper size exactly to the current viewport
+            currentDpr = window.devicePixelRatio || 1;
+            updatePixelSizes();
+
             wrapper.style.width = viewportWidth + 'px';
             wrapper.style.height = viewportHeight + 'px';
 
-            const dpr = window.devicePixelRatio || 1;
-
-            // Debug info: viewport size and DPR
             console.clear();
             console.log('Viewport (window.innerWidth x window.innerHeight): ' +
                 viewportWidth + ' x ' + viewportHeight);
-            console.log('devicePixelRatio:', dpr);
-            console.log('Note: hairline sizes (0.5px) are usually rendered as 1 physical pixel on Retina.');
+            console.log('devicePixelRatio:', currentDpr);
+            console.log('Note: base unit is 1 / devicePixelRatio CSS px; Pixel scale steps ~ physical pixels.');
 
-            // Clamp all active dots inside the new viewport
             for (const key in dots) {
                 const dot = dots[key];
                 if (!dot.active) continue;
@@ -208,12 +229,19 @@
                 if (dot.y > viewportHeight) dot.y = viewportHeight;
             }
 
-            // Keep frame and HUD visibility consistent with base state when not flashing
             if (!frameFlashActive) {
                 applyBaseFrameVisibility();
             }
 
-            // Log current state after resize (also refresh HUD text)
+            logState();
+        }
+
+        // Change pixel scale by delta (+1 or -1) and update sizes
+        function changePixelScale(delta) {
+            const newScale = Math.min(maxScale, Math.max(minScale, pixelScale + delta));
+            if (newScale === pixelScale) return;
+            pixelScale = newScale;
+            updatePixelSizes();
             logState();
         }
 
@@ -221,7 +249,6 @@
         function toggleFrame() {
             frameBaseVisible = !frameBaseVisible;
 
-            // If no flash is active, immediately reflect base visibility
             if (!frameFlashActive) {
                 applyBaseFrameVisibility();
             }
@@ -235,17 +262,15 @@
             if (!dot) return;
 
             if (dot.active) {
-                // Deactivate dot
                 dot.active = false;
                 dot.element.style.display = 'none';
             } else {
-                // Activate dot: place in the center with random direction
                 dot.active = true;
                 dot.x = viewportWidth / 2;
                 dot.y = viewportHeight / 2;
 
                 const angle = Math.random() * Math.PI * 2;
-                const speed = 0.75; // Movement speed in CSS pixels per frame (approx.)
+                const speed = 0.75;
 
                 dot.vx = Math.cos(angle) * speed;
                 dot.vy = Math.sin(angle) * speed;
@@ -257,51 +282,60 @@
             logState();
         }
 
-        // Flash the frame with the given color for a short time,
-        // regardless of base visibility.
+        // Flash the frame with the given color for a short time
         function flashFrame(color) {
             frameFlashActive = true;
-            frame.style.display = 'block';      // Ensure it is visible for the flash
-            frame.style.borderColor = color;    // Set flash color
+            frame.style.display = 'block';
+            frame.style.borderColor = color;
 
-            // If HUD is visible (base frame is enabled), flash HUD text with the same color
             if (frameBaseVisible) {
                 hud.style.color = color;
             }
 
-            frameFlashEndTime = performance.now() + 80; // Flash duration in ms
+            frameFlashEndTime = performance.now() + 80;
             logState();
         }
 
         // Keyboard handler
         function handleKeyDown(event) {
             if (event.code === 'Space' || event.key === ' ') {
-                // Toggle base frame visibility with Space
                 event.preventDefault();
                 toggleFrame();
                 return;
             }
 
-            // Number keys 1–4 to toggle dots
             if (event.key === '1' || event.key === '2' ||
                 event.key === '3' || event.key === '4') {
                 event.preventDefault();
                 toggleDot(event.key);
+                return;
+            }
+
+            // '=' or '+' to increase pixel scale (both work; '=' covers "same key as +" without Shift)
+            if (event.key === '=' || event.key === '+') {
+                event.preventDefault();
+                changePixelScale(+1);
+                return;
+            }
+
+            // '-' to decrease pixel scale
+            if (event.key === '-') {
+                event.preventDefault();
+                changePixelScale(-1);
+                return;
             }
         }
 
-        // Animation loop for moving dots and handling collisions
+        // Animation loop
         function animate() {
             const now = performance.now();
 
-            // Reset frame color after flash
             if (frameFlashActive && frameFlashEndTime > 0 && now > frameFlashEndTime) {
                 frameFlashActive = false;
                 frameFlashEndTime = 0;
 
-                // Return to base frame and HUD state
                 applyBaseFrameVisibility();
-                hud.style.color = hudBaseColor; // Reset HUD text color to base
+                hud.style.color = hudBaseColor;
                 logState();
             }
 
@@ -309,13 +343,11 @@
                 const dot = dots[key];
                 if (!dot.active) continue;
 
-                // Update position
                 dot.x += dot.vx;
                 dot.y += dot.vy;
 
                 let hitWall = false;
 
-                // Collision with left/right walls
                 if (dot.x <= 0) {
                     dot.x = 0;
                     dot.vx = Math.abs(dot.vx);
@@ -326,7 +358,6 @@
                     hitWall = true;
                 }
 
-                // Collision with top/bottom walls
                 if (dot.y <= 0) {
                     dot.y = 0;
                     dot.vy = Math.abs(dot.vy);
@@ -337,12 +368,10 @@
                     hitWall = true;
                 }
 
-                // If a wall was hit, flash the frame in this dot's color
                 if (hitWall) {
                     flashFrame(dot.color);
                 }
 
-                // Apply position via CSS transform for subpixel precision
                 dot.element.style.transform =
                     'translate(' + dot.x + 'px, ' + dot.y + 'px)';
             }
@@ -350,7 +379,6 @@
             requestAnimationFrame(animate);
         }
 
-        // Event listeners
         window.addEventListener('resize', resizeToViewport);
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('load', function () {
