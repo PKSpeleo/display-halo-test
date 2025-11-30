@@ -130,11 +130,11 @@
 
         // Dedicated storage for group-5 dots
         const colorGroupDots = [];
-        let colorGroupActive = false; // default off
+        let colorGroupActive = false; // toggled later
 
         // Dedicated storage for group-6 animated dots
         const animatedGroupDots = [];
-        let animatedGroupActive = false; // default off
+        let animatedGroupActive = false; // toggled later
 
         // Viewport size in CSS pixels
         let viewportWidth = 0;
@@ -144,8 +144,8 @@
         let currentDpr = window.devicePixelRatio || 1;
         let baseUnit = 1 / currentDpr;   // CSS px per "1 physical pixel" step
 
-        // DEFAULT: equivalent to ~20 physical pixels
-        let pixelScale = 20;             // How many physical pixels thick (approx)
+        // DEFAULT: equivalent to ~40 physical pixels
+        let pixelScale = 40;             // How many physical pixels thick (approx)
         const minScale = 1;              // No upper limit
 
         // Frame visibility and flashing
@@ -826,7 +826,11 @@
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('load', function () {
             resizeToViewport();
-            activateDefaultDots();   // 1–4 ON by default, start from center
+            // 1–4 ON by default
+            activateDefaultDots();
+            // 5 & 6 ON by default
+            toggleColorGroup();
+            toggleAnimatedGroup();
             requestAnimationFrame(animate);
         });
         document.addEventListener('DOMContentLoaded', resizeToViewport);
