@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MacBook Pro 16 M3 Max – Retina Pixel Test</title>
+    <title>Display Halo / Backlight Test (IPS / miniLED / OLED)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <style>
         html, body {
@@ -10,11 +10,11 @@
             padding: 0;
             width: 100%;
             height: 100%;
-            background: #000000; /* Absolutely black background */
+            background: #000000; /* Absolutely black background for halo/blooming tests */
             overflow: hidden;    /* No scrollbars */
         }
 
-        /* Fullscreen black wrapper */
+        /* Fullscreen black wrapper – main test area for observing halos / local dimming behavior */
         #wrapper {
             position: fixed;
             top: 0;
@@ -26,7 +26,7 @@
             z-index: 0;
         }
 
-        /* Frame drawn as a single border (under pixels) */
+        /* Frame drawn as a single border (under pixels), used to check uniformity near screen edges */
         #frame {
             position: absolute;
             top: 0;
@@ -38,10 +38,11 @@
             background: transparent;
             display: none; /* Base visibility (toggled by Space key) */
             pointer-events: none;
-            z-index: 1; /* Under all pixels */
+            z-index: 1; /* Under pixels and explosions */
         }
 
-        /* Moving pixel-like dots; actual size is controlled via JS */
+        /* Moving pixel-like dots; actual size is controlled via JS.
+           Used to observe local dimming, halos and blooming around small bright objects. */
         .pixel-dot {
             position: absolute;
             left: 0;
@@ -51,10 +52,10 @@
             background-color: #FFFFFF;
             display: none;  /* Toggled by number keys 1–4, 5, 6 */
             pointer-events: none;
-            z-index: 2; /* Above frame */
+            z-index: 2; /* Above frame, below HUD */
         }
 
-        /* Explosion wave (square ring) */
+        /* Explosion wave (square ring) – visualizes transient bright “flashes” to study halo behavior */
         .explosion {
             position: absolute;
             box-sizing: border-box;
@@ -86,13 +87,14 @@
 </head>
 <body>
 <div id="wrapper">
-    <!-- Pixel dots for keys 1–4 -->
+    <!-- Pixel dots for keys 1–4 (base R/G/B/W test pixels) -->
     <div id="dot1" class="pixel-dot"></div> <!-- Red -->
     <div id="dot2" class="pixel-dot"></div> <!-- Green -->
     <div id="dot3" class="pixel-dot"></div> <!-- Blue -->
     <div id="dot4" class="pixel-dot"></div> <!-- White -->
 
-    <!-- Frame with border that can blink on collisions with walls -->
+    <!-- Frame with border that can blink on collisions with walls.
+         Used to check edge behavior and blooming along the panel border. -->
     <div id="frame"></div>
 
     <!-- HUD with status info in the bottom-right corner -->
@@ -101,11 +103,13 @@
 
 <script>
     (function () {
+        // Main elements
         const wrapper = document.getElementById('wrapper');
         const frame = document.getElementById('frame');
         const hud = document.getElementById('hud');
 
         // Dot configuration per key (single pixels 1–4)
+        // These are primary test pixels for R/G/B/W halos on IPS / miniLED / OLED panels.
         const dotConfigs = {
             '1': { id: 'dot1', color: '#FF0000' }, // Red
             '2': { id: 'dot2', color: '#00FF00' }, // Green
@@ -115,7 +119,7 @@
 
         const SINGLE_KEYS = ['1', '2', '3', '4'];
 
-        // Human-readable labels with colors
+        // Human-readable labels with colors (for HUD and console)
         const dotLabels = {
             '1': '1 (R)',
             '2': '2 (G)',
@@ -123,13 +127,13 @@
             '4': '4 (W)'
         };
 
-        // Group "5" – vivid static colors
+        // Group "5" – vivid static colors to test multi-color halo behavior
         const COLOR_GROUP_LABEL_KEY = '5';
         const COLOR_GROUP_LABEL_TEXT = '5 (10 colour pixels)';
         const COLOR_GROUP_LABEL_COLOR = '#FF00FF'; // label color in HUD/console
         const COLOR_GROUP_COUNT = 10;
 
-        // Group "6" – animated colors
+        // Group "6" – animated colors (slowly shifting hue to test gradients and local dimming)
         const ANIMATED_GROUP_LABEL_KEY = '6';
         const ANIMATED_GROUP_LABEL_TEXT = '6 (10 animated colours)';
         const ANIMATED_GROUP_LABEL_COLOR = '#FFA500'; // label color in HUD/console
@@ -146,7 +150,7 @@
         const animatedGroupDots = [];
         let animatedGroupActive = false; // toggled later
 
-        // Explosions storage
+        // Explosions storage – transient square waves to observe blooming behavior
         const explosions = [];
         const EXPLOSION_DURATION = 1000; // ms
 
@@ -158,7 +162,7 @@
         let currentDpr = window.devicePixelRatio || 1;
         let baseUnit = 1 / currentDpr;   // CSS px per "1 physical pixel" step
 
-        // DEFAULT: equivalent to ~20 physical pixels
+        // DEFAULT: equivalent to ~20 physical pixels (approx physical size for test objects)
         let pixelScale = 20;             // How many physical pixels thick (approx)
         const minScale = 1;              // No upper limit
 
@@ -188,7 +192,7 @@
             };
         }
 
-        // hsv(0..1, 0..1, 0..1) -> 'rgb(r,g,b)'
+        // Convert HSV (0..1) to CSS rgb() string – used for vivid and animated colors
         function hsvToRgbCss(h, s, v) {
             let r, g, b;
             const i = Math.floor(h * 6);
@@ -213,6 +217,7 @@
         }
 
         // Build a vivid distinct palette of N colors (full saturation and value)
+        // Used for static group-5 test pixels.
         function buildVividPalette(count) {
             const colors = [];
             for (let i = 0; i < count; i++) {
@@ -252,7 +257,7 @@
             return { r: 255, g: 255, b: 255 };
         }
 
-        // Mix multiple CSS colors by averaging RGB
+        // Mix multiple CSS colors by averaging RGB – used for explosion wave color
         function mixColors(colors) {
             if (!colors.length) return 'rgb(255,255,255)';
             let sumR = 0, sumG = 0, sumB = 0;
@@ -327,12 +332,13 @@
             }
         }
 
-        // Helper: current pixel size in CSS px
+        // Helper: current pixel size in CSS px (scaled by physical pixel ratio)
         function getPixelSizeCss() {
             return (1 / currentDpr) * pixelScale;
         }
 
         // Randomize direction and set position to screen center
+        // All pixels start from the center, then move in random directions.
         function randomizeDotPositionAndVelocity(dot) {
             const sizeCss = getPixelSizeCss();
             const half = sizeCss / 2;
@@ -353,6 +359,7 @@
             baseUnit = 1 / currentDpr;
             const sizeCss = getPixelSizeCss();
 
+            // Frame border thickness corresponds to current pixel scale
             frame.style.borderWidth = sizeCss + 'px';
 
             for (const key in dots) {
@@ -410,7 +417,7 @@
                 (activeLabelsForLine.length ? activeLabelsForLine.join(', ') : 'none')
             );
 
-            // Colored console output
+            // Colored console output with per-label color
             if (activeSingleKeys.length || group5Active || group6Active) {
                 let line = 'Active pixels colored: ';
                 const styles = [];
@@ -508,6 +515,7 @@
             }
         }
 
+        // Resize handler – tracks current viewport and recalculates constraints
         function resizeToViewport() {
             viewportWidth = window.innerWidth;
             viewportHeight = window.innerHeight;
@@ -549,6 +557,7 @@
         }
 
         // Change pixel scale by delta (+1 or -1) and update sizes
+        // Used to test halo behavior for different physical sizes of bright objects.
         function changePixelScale(delta) {
             const newScale = Math.max(minScale, pixelScale + delta); // no upper bound
             if (newScale === pixelScale) return;
@@ -575,7 +584,7 @@
             logState();
         }
 
-        // Toggle base frame visibility (Space)
+        // Toggle base frame visibility (Space) – used to inspect edge glow/bleeding
         function toggleFrame() {
             frameBaseVisible = !frameBaseVisible;
 
@@ -604,7 +613,7 @@
             logState();
         }
 
-        // Toggle group 5 (10 vivid colour pixels)
+        // Toggle group 5 (10 vivid colour pixels) – multi-color static halo test
         function toggleColorGroup() {
             createColorGroupDotsIfNeeded();
             updatePixelSizes();
@@ -633,7 +642,7 @@
             logState();
         }
 
-        // Toggle group 6 (10 animated colour pixels)
+        // Toggle group 6 (10 animated colour pixels) – gradient / animation halo test
         function toggleAnimatedGroup() {
             createAnimatedGroupDotsIfNeeded();
             updatePixelSizes();
@@ -662,6 +671,7 @@
         }
 
         // Flash the frame with the given color for a short time (wall collisions)
+        // This lets you see how the panel handles sudden bright edges.
         function flashFrame(color) {
             frameFlashActive = true;
             frame.style.display = 'block';
@@ -676,6 +686,8 @@
         }
 
         // Create explosion at given center (cx, cy) with mixed color
+        // Explosion is a square ring with thickness = current pixel scale
+        // and radius up to 5 scales, lasting 1 second.
         function createExplosion(cx, cy, colors) {
             const explosionColor = mixColors(colors);
             const sizeCss = getPixelSizeCss();
@@ -753,6 +765,7 @@
         function animate() {
             const now = performance.now();
 
+            // Frame flash timeout
             if (frameFlashActive && frameFlashEndTime > 0 && now > frameFlashEndTime) {
                 frameFlashActive = false;
                 frameFlashEndTime = 0;
@@ -894,7 +907,7 @@
                     'translate(' + (dot.x - half) + 'px, ' + (dot.y - half) + 'px)';
             }
 
-            // Fourth pass: update explosions (square wave)
+            // Fourth pass: update explosions (square wave expanding over time)
             const toRemove = [];
             for (let i = 0; i < explosions.length; i++) {
                 const ex = explosions[i];
@@ -945,13 +958,14 @@
             logState();
         }
 
+        // Event listeners
         window.addEventListener('resize', resizeToViewport);
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('load', function () {
             resizeToViewport();
             // 1–4 ON by default
             activateDefaultDots();
-            // 5 & 6 ON by default
+            // 5 & 6 ON by default for more complex halo tests
             toggleColorGroup();
             toggleAnimatedGroup();
             requestAnimationFrame(animate);
