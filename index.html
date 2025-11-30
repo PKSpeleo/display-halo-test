@@ -97,6 +97,10 @@
          Used to check edge behavior and blooming along the panel border. -->
     <div id="frame"></div>
 
+    <!-- Dummy explosion element so the .explosion selector is statically “used”.
+         Real explosion rings are created dynamically via JavaScript. -->
+    <div class="explosion" style="display:none;"></div>
+
     <!-- HUD with status info in the bottom-right corner -->
     <div id="hud"></div>
 </div>
@@ -340,9 +344,6 @@
         // Randomize direction and set position to screen center
         // All pixels start from the center, then move in random directions.
         function randomizeDotPositionAndVelocity(dot) {
-            const sizeCss = getPixelSizeCss();
-            const half = sizeCss / 2;
-
             // Place dot in the exact center of the viewport
             dot.x = viewportWidth / 2;
             dot.y = viewportHeight / 2;
@@ -757,7 +758,6 @@
             if (code === 'Minus' || code === 'NumpadSubtract') {
                 event.preventDefault();
                 changePixelScale(-1);
-                return;
             }
         }
 
