@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MacBook Pro 16 M3 Max – Screen Pixel Test</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: #000000; /* Absolutely black background */
+            overflow: hidden; /* No scrollbars */
+        }
+
+        /* Black area that exactly matches the visible window size */
+        #wrapper {
+            position: fixed;
+            top: 0;
+            left: 0;
+            background: #000000; /* Absolutely black background */
+        }
+
+        /* Inner white 1px border along the perimeter (inside) */
+        #frame {
+            position: absolute;
+            top: 1px;
+            left: 1px;
+            right: 1px;
+            bottom: 1px;
+            border: 1px solid #FFFFFF; /* Absolutely white border */
+            box-sizing: border-box;
+            background: transparent;
+            display: none; /* Hidden by default, toggled by Space key */
+        }
+    </style>
+</head>
+<body>
+<div id="wrapper">
+    <div id="frame"></div>
+</div>
+
+<script>
+    (function () {
+        const wrapper = document.getElementById('wrapper');
+        const frame = document.getElementById('frame');
+        let frameVisible = false;
+
+        function resizeToViewport() {
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+
+            // Set the black area width and height to match the current viewport
+            wrapper.style.width = vw + 'px';
+            wrapper.style.height = vh + 'px';
+
+            // Debug info in the console: logical viewport and physical screen size
+            console.clear();
+            console.log('Viewport (window.innerWidth x window.innerHeight): ' + vw + ' x ' + vh);
+            console.log('Screen (screen.width x screen.height): ' + window.screen.width + ' x ' + window.screen.height);
+        }
+
+        // Handle Space key to toggle border visibility
+        function handleKeyDown(event) {
+            if (event.code === 'Space' || event.key === ' ') {
+                // Prevent default scrolling or page actions
+                event.preventDefault();
+                frameVisible = !frameVisible;
+                frame.style.display = frameVisible ? 'block' : 'none';
+            }
+        }
+
+        // Adjust to viewport changes
+        window.addEventListener('resize', resizeToViewport);
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('load', resizeToViewport);
+        document.addEventListener('DOMContentLoaded', resizeToViewport);
+    })();
+</script>
+</body>
+</html>
