@@ -118,10 +118,9 @@
         let currentDpr = window.devicePixelRatio || 1;
         let baseUnit = 1 / currentDpr;   // CSS px per "1 physical pixel" step
 
-        // DEFAULT: equivalent to ~10 physical pixels
-        let pixelScale = 10;             // How many physical pixels thick (approx)
-        const minScale = 1;
-        const maxScale = 20;
+        // DEFAULT: equivalent to ~20 physical pixels
+        let pixelScale = 20;             // How many physical pixels thick (approx)
+        const minScale = 1;              // No upper limit
 
         // Frame visibility and flashing
         let frameBaseVisible = false;       // Controlled by Space key
@@ -296,7 +295,7 @@
 
         // Change pixel scale by delta (+1 or -1) and update sizes
         function changePixelScale(delta) {
-            const newScale = Math.min(maxScale, Math.max(minScale, pixelScale + delta));
+            const newScale = Math.max(minScale, pixelScale + delta); // no upper bound
             if (newScale === pixelScale) return;
             pixelScale = newScale;
             updatePixelSizes();
