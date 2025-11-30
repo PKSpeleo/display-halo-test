@@ -9,6 +9,20 @@ Because it is a single self-contained HTML file, it can be hosted for free on **
 
 ---
 
+## Table of contents
+
+- [What this tool shows](#what-this-tool-shows)
+- [Basic usage](#basic-usage)
+- [Controls](#controls)
+    - [Frame (edges of the panel)](#frame-edges-of-the-panel)
+    - [Pixel modes](#pixel-modes)
+    - [Pixel size / halo scale](#pixel-size--halo-scale)
+    - [Fun interaction mode (catch & kick pixels)](#fun-interaction-mode-catch--kick-pixels)
+- [How to use it in practice](#how-to-use-it-in-practice)
+- [Notes](#notes)
+
+---
+
 ## What this tool shows
 
 - How a screen handles **small bright objects on a black background**
@@ -109,12 +123,12 @@ When the frame is visible, the small HUD in the bottom-right corner shows:
 
 ---
 
-## Fun interaction mode (catch & kick pixels)
+### Fun interaction mode (catch & kick pixels)
 
 Besides “static” observation, there is a small **entertainment / interaction mode** that is also useful for testing:
 you can catch pixels with a bright square and **launch** them to see how halos behave during fast motion.
 
-### Desktop (mouse)
+#### Desktop (mouse)
 
 - Press and hold the **left mouse button** anywhere on the screen.
     - A bright **square “paddle”** with a rainbow frame appears under the cursor.
@@ -135,7 +149,7 @@ This lets you see how halos and blooming behave when bright objects are:
 - suddenly accelerated or stopped,
 - clustered around a larger bright shape (the square).
 
-### Mobile / tablet (multi-touch)
+#### Mobile / tablet (multi-touch)
 
 On touch devices the same logic works with fingers:
 
